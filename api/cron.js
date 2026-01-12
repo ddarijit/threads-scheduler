@@ -226,7 +226,10 @@ export default async function handler(req, res) {
 
                 await supabase
                     .from('threads')
-                    .update({ status: 'failed' })
+                    .update({
+                        status: 'failed',
+                        error_message: err.message
+                    })
                     .eq('id', thread.id);
 
                 results.push({ id: thread.id, status: 'failed', error: err.message });

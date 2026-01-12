@@ -10,9 +10,10 @@ interface Thread {
     content: string;
     first_comment?: string | null;
     scheduled_time: string | null;
-    status: 'draft' | 'scheduled' | 'published';
+    status: 'draft' | 'scheduled' | 'published' | 'failed';
     created_at: string;
     media_urls?: string[] | null;
+    error_message?: string | null;
 }
 
 export const Queue = () => {
@@ -236,6 +237,11 @@ export const Queue = () => {
                                             : 'Unscheduled'}
                                     </span>
                                     <span className={`status-badge ${thread.status}`}>{thread.status}</span>
+                                    {thread.status === 'failed' && thread.error_message && (
+                                        <div className="mt-1 text-xs text-red-400 bg-red-500/10 p-2 rounded border border-red-500/20">
+                                            Error: {thread.error_message}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="actions flex items-center gap-2">
                                     {(thread.status === 'scheduled' || thread.status === 'draft') && (
