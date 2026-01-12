@@ -24,6 +24,56 @@ export default async function handler(req, res) {
         console.log('[Cron] Running scheduled checks...');
         const now = new Date().toISOString();
 
+        // --- 0. MAINTENANCE TASKS ---
+
+        // A. Stuck Job Recovery (Publishing > 20 mins)
+        // If a job is 'publishing' but scheduled_time is > 20 mins ago, it's likely dead.
+        const twentyMinsAgo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+        const { error: cleanupError } = await supabase
+            .from('threads')
+            .update({
+                status: 'failed',
+                error_message: 'Publishing timed out (stuck > 20 mins). Automatic Recovery.'
+            })
+            .eq('status', 'publishing')
+            .lt('scheduled_time', twentyMinsAgo);
+
+        if (cleanupError) console.error('[Cron] Cleanup Error:', cleanupError.message);
+
+        // B. Token Refresh (Refresh tokens older than 55 days)
+        // Threads tokens expire in 60 days. We refresh at 55 days.
+        const fiftyFiveDaysAgo = new Date(Date.now() - 55 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: expiringTokens } = await supabase
+            .from('user_tokens')
+            .select('user_id, threads_access_token')
+            .lt('updated_at', fiftyFiveDaysAgo);
+
+        if (expiringTokens && expiringTokens.length > 0) {
+            console.log(`[Cron] Found ${expiringTokens.length} tokens to refresh.`);
+            for (const token of expiringTokens) {
+                try {
+                    const refreshUrl = `https://graph.threads.net/refresh_access_token?grant_type=th_refresh_token&access_token=${token.threads_access_token}`;
+                    const refreshRes = await fetch(refreshUrl);
+                    const refreshData = await refreshRes.json();
+
+                    if (refreshData.access_token) {
+                        await supabase
+                            .from('user_tokens')
+                            .update({
+                                threads_access_token: refreshData.access_token,
+                                updated_at: new Date().toISOString()
+                            })
+                            .eq('user_id', token.user_id);
+                        console.log(`[Cron] Refreshed token for user ${token.user_id}`);
+                    } else if (refreshData.error) {
+                        console.error(`[Cron] Failed to refresh token for user ${token.user_id}:`, refreshData.error.message);
+                    }
+                } catch (refreshErr) {
+                    console.error(`[Cron] Unexpected error refreshing token for user ${token.user_id}:`, refreshErr.message);
+                }
+            }
+        }
+
         // 1. Fetch Due Threads
         const { data: dueThreads, error } = await supabase
             .from('threads')
