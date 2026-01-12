@@ -251,6 +251,34 @@ cron.schedule('*/10 * * * * *', async () => {
 
                 console.log(`[Cron] Successfully published thread ${thread.id}`);
 
+                // --- 6. Cleanup Media (Save Storage) ---
+                if (mediaUrls.length > 0) {
+                    try {
+                        const pathsToDelete = mediaUrls.map(url => {
+                            try {
+                                // Extract path after 'thread-media/'
+                                const parts = url.split('/thread-media/');
+                                return parts.length > 1 ? parts[1] : null;
+                            } catch { return null; }
+                        }).filter(Boolean);
+
+                        if (pathsToDelete.length > 0) {
+                            console.log(`[Cron] Cleaning up ${pathsToDelete.length} media files...`);
+                            const { error: removeError } = await supabase.storage
+                                .from('thread-media')
+                                .remove(pathsToDelete);
+
+                            if (removeError) {
+                                console.error('[Cron] Failed to delete media:', removeError);
+                            } else {
+                                console.log('[Cron] Media cleanup successful.');
+                            }
+                        }
+                    } catch (cleanupErr) {
+                        console.error('[Cron] Error during media cleanup:', cleanupErr);
+                    }
+                }
+
             } catch (err) {
                 console.error(`[Cron] Failed to publish thread ${thread.id}:`, err.message);
 
