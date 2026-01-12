@@ -238,8 +238,12 @@ export default async function handler(req, res) {
                 const publishedId = publishResult.id;
 
                 // --- C. Post First Comment ---
+                let warningMessage = null;
                 if (thread.first_comment && publishedId) {
                     try {
+                        console.log('[Cron] Waiting 2s before posting comment...');
+                        await new Promise(r => setTimeout(r, 2000));
+
                         const commentParams = new URLSearchParams();
                         commentParams.append('media_type', 'TEXT');
                         commentParams.append('text', thread.first_comment);
@@ -256,6 +260,7 @@ export default async function handler(req, res) {
                         await postToThreads('threads_publish', commentPublishParams);
                     } catch (commentErr) {
                         console.error('[Cron] Failed to publish first comment (non-fatal):', commentErr.message);
+                        warningMessage = `Published, but comment failed: ${commentErr.message}`;
                     }
                 }
 
@@ -264,12 +269,13 @@ export default async function handler(req, res) {
                     .from('threads')
                     .update({
                         status: 'published',
-                        scheduled_time: new Date().toISOString()
+                        scheduled_time: new Date().toISOString(),
+                        error_message: warningMessage // Clear error or set warning
                     })
                     .eq('id', thread.id);
 
                 console.log(`[Cron] Successfully published thread ${thread.id}`);
-                results.push({ id: thread.id, status: 'published' });
+                results.push({ id: thread.id, status: 'published', warning: warningMessage });
 
             } catch (err) {
                 console.error(`[Cron] Failed to publish thread ${thread.id}:`, err.message);
