@@ -63,7 +63,7 @@ export const Queue = () => {
         if (filter !== 'all') {
             if (filter === 'scheduled') query = query.eq('status', 'scheduled');
             if (filter === 'draft') query = query.eq('status', 'draft');
-            if (filter === 'published') query = query.eq('status', 'published');
+            if (filter === 'published') query = query.in('status', ['published', 'failed']);
         }
 
         const { data, error } = await query;
