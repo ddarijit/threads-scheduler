@@ -1,0 +1,413 @@
+/* Calendar Grid Layout */
+.calendar-container {
+    padding: 1rem;
+}
+
+.calendar-header {
+    margin-bottom: 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.calendar-header h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: white;
+    margin: 0;
+}
+
+.grid {
+    display: grid;
+    width: 100%;
+}
+
+.grid-cols-7 {
+    grid-template-columns: repeat(7, 1fr);
+}
+
+.calendar-grid {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* Cell Styles */
+.calendar-cell {
+    min-height: 120px;
+    padding: 0.5rem;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    position: relative;
+    transition: background-color 0.2s;
+}
+
+/* Remove right border for the last column */
+.grid-cols-7>.calendar-cell:nth-child(7n) {
+    border-right: none;
+}
+
+.calendar-cell:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.calendar-cell.other-month {
+    background-color: rgba(0, 0, 0, 0.2);
+    color: #52525b;
+}
+
+.calendar-cell.current-month {
+    background-color: rgba(255, 255, 255, 0.02);
+    color: #e4e4e7;
+}
+
+.calendar-cell.today {
+    background-color: rgba(59, 130, 246, 0.05);
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.3);
+}
+
+/* Date Number */
+.date-number {
+    text-align: right;
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+/* Day Names Header */
+.day-name {
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #a1a1aa;
+    padding: 1rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Event List */
+.events-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 85px;
+    overflow-y: auto;
+}
+
+/* Event Item */
+.event-item {
+    font-size: 0.75rem;
+    padding: 4px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: all 0.2s;
+}
+
+.event-item.scheduled {
+    background: rgba(59, 130, 246, 0.1);
+    border-left-color: #3b82f6;
+    color: #bfdbfe;
+}
+
+.event-item.scheduled:hover {
+    background: rgba(59, 130, 246, 0.2);
+}
+
+.event-item.published {
+    background: rgba(16, 185, 129, 0.1);
+    border-left-color: #10b981;
+    color: #a7f3d0;
+}
+
+.event-item.published:hover {
+    background: rgba(16, 185, 129, 0.2);
+}
+
+.event-time {
+    font-weight: 700;
+    margin-right: 4px;
+    opacity: 0.8;
+}
+
+/* Controls */
+.nav-btn {
+    padding: 0.5rem;
+    border-radius: 9999px;
+    color: #e4e4e7;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.nav-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.today-btn {
+    padding: 6px 16px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #60a5fa;
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    transition: all 0.2s;
+}
+
+.today-btn:hover {
+    background: rgba(59, 130, 246, 0.2);
+}
+
+/* Scrollbar within cells */
+.events-list::-webkit-scrollbar {
+    width: 3px;
+}
+
+.events-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+/* Day View Styles */
+.day-view-container {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    height: 600px;
+    overflow-y: auto;
+    position: relative;
+    width: 100%;
+}
+
+.day-view-row {
+    display: flex;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    min-height: 80px;
+}
+
+.day-view-row:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.hour-label {
+    width: 80px;
+    padding: 1rem;
+    text-align: right;
+    font-size: 0.85rem;
+    color: #71717a;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.2);
+    flex-shrink: 0;
+}
+
+.hour-content {
+    flex: 1;
+    padding: 0.5rem;
+    position: relative;
+    width: 100%;
+}
+
+.day-event-card {
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    font-size: 0.9rem;
+    border-left: 3px solid;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.day-event-card:hover {
+    opacity: 0.9;
+}
+
+.day-event-card.published {
+    background: rgba(16, 185, 129, 0.1);
+    border-left-color: #10b981;
+    color: #d1fae5;
+}
+
+.day-event-card.scheduled {
+    background: rgba(59, 130, 246, 0.1);
+    border-left-color: #3b82f6;
+    color: #dbeafe;
+}
+
+.event-time-badge {
+    font-weight: 700;
+    opacity: 0.7;
+    font-size: 0.75rem;
+    margin-bottom: 2px;
+    display: block;
+}
+
+.current-time-line {
+    position: absolute;
+    left: 80px;
+    right: 0;
+    border-top: 2px solid #ef4444;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.current-time-dot {
+    position: absolute;
+    left: -5px;
+    top: -4px;
+    width: 8px;
+    height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
+}
+
+/* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.modal-content {
+    background: #18181b;
+    /* Zinc 900 */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 450px;
+    position: relative;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: white;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: #a1a1aa;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.close-btn:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-label {
+    display: block;
+    font-size: 0.875rem;
+    color: #a1a1aa;
+    margin-bottom: 0.5rem;
+}
+
+.form-textarea {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 0.75rem;
+    color: white;
+    font-size: 0.9rem;
+    resize: none;
+    outline: none;
+    font-family: inherit;
+}
+
+.form-textarea:focus {
+    border-color: #3b82f6;
+}
+
+.form-input-container {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+}
+
+.form-input {
+    background: transparent;
+    border: none;
+    color: white;
+    width: 100%;
+    outline: none;
+    font-size: 0.9rem;
+    color-scheme: dark;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+.btn-secondary {
+    background: transparent;
+    color: #d4d4d8;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-primary:hover {
+    background: #1d4ed8;
+}
+
+.btn-primary:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
