@@ -12,13 +12,11 @@ import {
     addDays,
     subDays,
     isToday,
-    setHours,
-    setMinutes,
     eachHourOfInterval,
     startOfDay,
     endOfDay
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, Loader2, X, Clock, Calendar as CalendarIcon, List } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, X, Clock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import '../../styles/Calendar.css';
@@ -184,7 +182,6 @@ export const Calendar = () => {
         const endDate = endOfWeek(monthEnd);
 
         const rows = [];
-        let days = [];
         let day = startDate;
 
         rows.push(
