@@ -56,15 +56,43 @@ export default async function handler(req, res) {
             data = JSON.parse(text); // Fallback
         }
 
+        // 1. Get Short-Lived Token
         if (data.error) {
-            console.error('Threads API Error:', data.error);
+            console.error('Threads API Error (Short-Lived):', data.error);
             return res.status(400).json({ error: data.error });
         }
 
-        // Return clean data
+        const shortLivedToken = data.access_token;
+        const threadsUserId = String(data.user_id);
+
+        console.log('Got short-lived token. Exchanging for long-lived token...');
+
+        // 2. Exchange for Long-Lived Token
+        const exchangeUrl = new URL('https://graph.threads.net/access_token');
+        exchangeUrl.searchParams.append('grant_type', 'th_exchange_token');
+        exchangeUrl.searchParams.append('client_secret', appSecret);
+        exchangeUrl.searchParams.append('access_token', shortLivedToken);
+
+        const exchangeResponse = await fetch(exchangeUrl.toString(), { method: 'GET' });
+        const exchangeText = await exchangeResponse.text();
+        const exchangeData = JSON.parse(exchangeText);
+
+        if (exchangeData.error) {
+            console.error('Threads API Error (Long-Lived):', exchangeData.error);
+            // Fallback: Return short-lived token if exchange fails, but log it loudly
+            console.warn('Falling back to short-lived token.');
+            return res.status(200).json({
+                access_token: shortLivedToken,
+                user_id: threadsUserId
+            });
+        }
+
+        console.log('Successfully obtained long-lived token!');
+
+        // Return clean data (Long-Lived)
         return res.status(200).json({
-            access_token: data.access_token,
-            user_id: String(data.user_id) // Ensure string
+            access_token: exchangeData.access_token,
+            user_id: threadsUserId
         });
 
     } catch (err) {
