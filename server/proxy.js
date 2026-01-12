@@ -29,8 +29,8 @@ if (!supabaseServiceKey) {
 const supabase = createClient(supabaseUrl, supabaseServiceKey || 'placeholder');
 
 // --- CRON SCHEDULER ---
-// Runs every minute
-cron.schedule('* * * * *', async () => {
+// Runs every 10 seconds
+cron.schedule('*/10 * * * * *', async () => {
     console.log('[Cron] Running scheduled checks...');
 
     if (!supabaseServiceKey) {
