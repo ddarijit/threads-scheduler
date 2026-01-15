@@ -3,6 +3,7 @@ import { Clock, MoreHorizontal, AlertCircle, Send, Loader2, Trash2, FileSpreadsh
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { threadsApi } from '../../lib/threadsApi';
+import { CreateThreadModal } from '../../components/CreateThreadModal';
 import { ImportModal } from '../../components/ImportModal';
 import '../../styles/Queue.css';
 
@@ -17,6 +18,8 @@ interface Thread {
     error_message?: string | null;
 }
 
+export type { Thread }; // Export for CreateThreadModal
+
 export const Queue = () => {
     const { user } = useAuth();
     const [threads, setThreads] = useState<Thread[]>([]);
@@ -25,6 +28,8 @@ export const Queue = () => {
     const [filter, setFilter] = useState<'all' | 'scheduled' | 'draft' | 'published'>('scheduled');
     const [stats, setStats] = useState({ scheduled: 0, drafts: 0, published: 0 });
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [editingThread, setEditingThread] = useState<Thread | null>(null);
 
     // New state for publishing
     const [publishingId, setPublishingId] = useState<string | null>(null);
@@ -278,6 +283,20 @@ export const Queue = () => {
 
                                         {activeMenu === thread.id && (
                                             <div className="dropdown-menu">
+                                                {thread.status !== 'published' && (
+                                                    <button
+                                                        className="dropdown-item"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setEditingThread(thread);
+                                                            setIsCreateModalOpen(true);
+                                                            setActiveMenu(null);
+                                                        }}
+                                                    >
+                                                        <FileSpreadsheet size={14} /> {/* Reusing icon, maybe change to Edit/Pencil later */}
+                                                        Edit
+                                                    </button>
+                                                )}
                                                 <button
                                                     className="dropdown-item danger"
                                                     onClick={(e) => {
@@ -297,6 +316,22 @@ export const Queue = () => {
                 </div>
             )}
 
+
+            {/* Create/Edit Thread Modal */}
+            <CreateThreadModal
+                isOpen={isCreateModalOpen || !!editingThread}
+                onClose={() => {
+                    setIsCreateModalOpen(false);
+                    setEditingThread(null);
+                }}
+                onSuccess={() => {
+                    fetchThreads();
+                    fetchStats();
+                    setIsCreateModalOpen(false);
+                    setEditingThread(null);
+                }}
+                threadToEdit={editingThread}
+            />
 
             <ImportModal
                 isOpen={isImportModalOpen}

@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react';
-import { X, Calendar as CalendarIcon, Loader2, Image as ImageIcon, MessageCircle } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { X, Calendar as CalendarIcon, Loader2, Image as ImageIcon, MessageCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import type { Thread } from '../pages/dashboard/Queue'; // Assuming Thread interface is exported or I will define a local partial one
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import '../styles/Modal.css';
@@ -8,18 +9,61 @@ interface CreateThreadModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSuccess: () => void;
+    threadToEdit?: any; // Using any to avoid circular deps for now, or define partial interface
 }
 
-export const CreateThreadModal = ({ isOpen, onClose, onSuccess }: CreateThreadModalProps) => {
+export const CreateThreadModal = ({ isOpen, onClose, onSuccess, threadToEdit }: CreateThreadModalProps) => {
     const { user } = useAuth();
     const [content, setContent] = useState('');
     const [firstComment, setFirstComment] = useState('');
     const [showFirstComment, setShowFirstComment] = useState(false);
     const [scheduledTime, setScheduledTime] = useState('');
-    const [mediaFiles, setMediaFiles] = useState<File[]>([]);
-    const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
+
+    // Media State
+    // We need to handle both raw Files (new uploads) and string URLs (existing)
+    // Actually simplicity: separate them? Or unified?
+    // Unified approach: `mediaItems: { type: 'file' | 'url', data: File | string }[]`
+    const [mediaItems, setMediaItems] = useState<{ type: 'file' | 'url', data: File | string, preview: string }[]>([]);
+
     const [loading, setLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Initialize from threadToEdit
+    useEffect(() => {
+        if (isOpen) {
+            if (threadToEdit) {
+                setContent(threadToEdit.content || '');
+                setFirstComment(threadToEdit.first_comment || '');
+                setShowFirstComment(!!threadToEdit.first_comment);
+
+                // ISO string to datetime-local format: YYYY-MM-DDTHH:mm
+                if (threadToEdit.scheduled_time) {
+                    const date = new Date(threadToEdit.scheduled_time);
+                    const localIso = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+                    setScheduledTime(localIso);
+                } else {
+                    setScheduledTime('');
+                }
+
+                if (threadToEdit.media_urls && Array.isArray(threadToEdit.media_urls)) {
+                    setMediaItems(threadToEdit.media_urls.map((url: string) => ({
+                        type: 'url',
+                        data: url,
+                        preview: url
+                    })));
+                } else {
+                    setMediaItems([]);
+                }
+            } else {
+                // Reset for new thread
+                setContent('');
+                setFirstComment('');
+                setShowFirstComment(false);
+                setScheduledTime('');
+                setMediaItems([]);
+            }
+        }
+    }, [isOpen, threadToEdit]);
 
     if (!isOpen) return null;
 
@@ -27,7 +71,7 @@ export const CreateThreadModal = ({ isOpen, onClose, onSuccess }: CreateThreadMo
         if (e.target.files && e.target.files.length > 0) {
             const newFiles = Array.from(e.target.files);
 
-            // Filter out unsupported types (specifically WebP)
+            // Filter out unsupported types
             const validFiles = newFiles.filter(file => {
                 const isValid = file.type === 'image/jpeg' ||
                     file.type === 'image/png' ||
@@ -39,16 +83,30 @@ export const CreateThreadModal = ({ isOpen, onClose, onSuccess }: CreateThreadMo
             });
 
             if (validFiles.length > 0) {
-                setMediaFiles(prev => [...prev, ...validFiles]);
-                const newPreviews = validFiles.map(file => URL.createObjectURL(file));
-                setMediaPreviews(prev => [...prev, ...newPreviews]);
+                const newItems = validFiles.map(file => ({
+                    type: 'file' as const,
+                    data: file,
+                    preview: URL.createObjectURL(file)
+                }));
+                setMediaItems(prev => [...prev, ...newItems]);
             }
         }
     };
 
     const removeMedia = (index: number) => {
-        setMediaFiles(prev => prev.filter((_, i) => i !== index));
-        setMediaPreviews(prev => prev.filter((_, i) => i !== index));
+        setMediaItems(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const moveMedia = (index: number, direction: 'left' | 'right') => {
+        setMediaItems(prev => {
+            const newItems = [...prev];
+            if (direction === 'left' && index > 0) {
+                [newItems[index - 1], newItems[index]] = [newItems[index], newItems[index - 1]];
+            } else if (direction === 'right' && index < newItems.length - 1) {
+                [newItems[index + 1], newItems[index]] = [newItems[index], newItems[index + 1]];
+            }
+            return newItems;
+        });
     };
 
     const uploadMedia = async (file: File) => {
@@ -68,41 +126,58 @@ export const CreateThreadModal = ({ isOpen, onClose, onSuccess }: CreateThreadMo
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!content.trim() && mediaFiles.length === 0) return;
+        if (!content.trim() && mediaItems.length === 0) return;
 
         setLoading(true);
         try {
-            let mediaUrls: string[] = [];
-            if (mediaFiles.length > 0) {
-                // Upload all files in parallel
-                mediaUrls = await Promise.all(mediaFiles.map(file => uploadMedia(file)));
+            let finalMediaUrls: string[] = [];
+
+            // Process all media items
+            // If it's a file, upload it. If it's a URL, keep it.
+            if (mediaItems.length > 0) {
+                finalMediaUrls = await Promise.all(mediaItems.map(async (item) => {
+                    if (item.type === 'file') {
+                        return await uploadMedia(item.data as File);
+                    } else {
+                        return item.data as string;
+                    }
+                }));
             }
 
             const status = scheduledTime ? 'scheduled' : 'draft';
 
-            console.log('DEBUG: Attempting to insert thread');
-            console.log('DEBUG: User ID:', user?.id);
-            const { data: sessionData } = await supabase.auth.getSession();
-            console.log('DEBUG: Supabase Session User:', sessionData.session?.user?.id);
-
-            const { error } = await supabase.from('threads').insert({
+            // Common payload
+            const payload = {
                 user_id: user?.id,
                 content,
                 first_comment: firstComment.trim() || null,
-                // Convert local input time to UTC ISO string before saving
                 scheduled_time: scheduledTime ? new Date(scheduledTime).toISOString() : null,
                 status,
-                media_urls: mediaUrls.length > 0 ? mediaUrls : null
-            });
+                media_urls: finalMediaUrls.length > 0 ? finalMediaUrls : null
+            };
 
-            if (error) throw error;
+            if (threadToEdit) {
+                // UPDATE existing thread
+                const { error } = await supabase
+                    .from('threads')
+                    .update(payload)
+                    .eq('id', threadToEdit.id);
+                if (error) throw error;
+            } else {
+                // INSERT new thread
+                const { error } = await supabase
+                    .from('threads')
+                    .insert(payload);
+                if (error) throw error;
+            }
+
+
 
             setContent('');
             setFirstComment('');
             setShowFirstComment(false);
             setScheduledTime('');
-            setMediaFiles([]);
-            setMediaPreviews([]);
+            setMediaItems([]);
             onSuccess();
             onClose();
         } catch (error: any) {
@@ -117,7 +192,7 @@ export const CreateThreadModal = ({ isOpen, onClose, onSuccess }: CreateThreadMo
         <div className="modal-overlay">
             <div className="modal-content glass-panel">
                 <div className="modal-header">
-                    <h3>New Thread</h3>
+                    <h3>{threadToEdit ? 'Edit Thread' : 'New Thread'}</h3>
                     <button onClick={onClose} className="icon-btn"><X size={20} /></button>
                 </div>
 
@@ -131,31 +206,56 @@ export const CreateThreadModal = ({ isOpen, onClose, onSuccess }: CreateThreadMo
                             className="thread-input"
                             autoFocus
                         />
-                        {mediaPreviews.length > 0 && (
+                        {mediaItems.length > 0 && (
                             <div className="media-preview-list flex gap-2 overflow-x-auto mt-2 pb-2">
-                                {mediaPreviews.map((preview, index) => (
-                                    <div key={index} className="relative flex-shrink-0" style={{ width: '150px' }}>
-                                        {mediaFiles[index]?.type.startsWith('video/') ? (
+                                {mediaItems.map((item, index) => (
+                                    <div key={index} className="relative flex-shrink-0 group" style={{ width: '150px' }}>
+                                        {/* Render Video or Image */}
+                                        {(item.type === 'file' && (item.data as File).type.startsWith('video/')) || (item.type === 'url' && (item.data as string).match(/\.(mp4|mov|avi|webm)($|\?)/i)) ? (
                                             <video
-                                                src={preview}
+                                                src={item.preview}
                                                 className="rounded-lg border border-white/10"
                                                 style={{ width: '150px', height: '150px', objectFit: 'cover', backgroundColor: '#000' }}
                                             />
                                         ) : (
                                             <img
-                                                src={preview}
+                                                src={item.preview}
                                                 alt={`Preview ${index}`}
                                                 className="rounded-lg border border-white/10"
                                                 style={{ width: '150px', height: '150px', objectFit: 'cover' }}
                                             />
                                         )}
+
+                                        {/* Delete Button */}
                                         <button
                                             type="button"
                                             onClick={() => removeMedia(index)}
-                                            className="absolute top-1 right-1 bg-black/70 p-1 rounded-full text-white hover:bg-black/90 transition-colors"
+                                            className="absolute top-1 right-1 bg-black/70 p-1 rounded-full text-white hover:bg-red-500 transition-colors z-10"
                                         >
                                             <X size={12} />
                                         </button>
+
+                                        {/* Reorder Controls */}
+                                        {mediaItems.length > 1 && (
+                                            <div className="absolute bottom-1 left-1 right-1 flex justify-between px-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    type="button"
+                                                    disabled={index === 0}
+                                                    onClick={() => moveMedia(index, 'left')}
+                                                    className="bg-black/70 p-1 rounded-full text-white hover:bg-purple-500 disabled:opacity-30 disabled:hover:bg-black/70"
+                                                >
+                                                    <ChevronLeft size={12} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={index === mediaItems.length - 1}
+                                                    onClick={() => moveMedia(index, 'right')}
+                                                    className="bg-black/70 p-1 rounded-full text-white hover:bg-purple-500 disabled:opacity-30 disabled:hover:bg-black/70"
+                                                >
+                                                    <ChevronRight size={12} />
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -217,8 +317,8 @@ export const CreateThreadModal = ({ isOpen, onClose, onSuccess }: CreateThreadMo
                             />
                         </div>
 
-                        <button type="submit" className="btn-primary" disabled={loading || (!content.trim() && mediaFiles.length === 0)}>
-                            {loading ? <Loader2 className="animate-spin" size={18} /> : (scheduledTime ? 'Schedule' : 'Save Draft')}
+                        <button type="submit" className="btn-primary" disabled={loading || (!content.trim() && mediaItems.length === 0)}>
+                            {loading ? <Loader2 className="animate-spin" size={18} /> : (scheduledTime ? (threadToEdit ? 'Update Schedule' : 'Schedule') : (threadToEdit ? 'Update Draft' : 'Save Draft'))}
                         </button>
                     </div>
                 </form>

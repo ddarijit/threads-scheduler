@@ -16,30 +16,25 @@ import {
     startOfDay,
     endOfDay
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, Loader2, X, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { CreateThreadModal } from '../../components/CreateThreadModal';
+import type { Thread } from './Queue';
 import '../../styles/Calendar.css';
 
-interface CalendarEvent {
-    id: string;
-    content: string;
-    scheduled_time: string;
-    status: 'scheduled' | 'published' | 'draft';
-}
+
 
 export const Calendar = () => {
     const { user } = useAuth();
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [events, setEvents] = useState<CalendarEvent[]>([]);
+    const [events, setEvents] = useState<Thread[]>([]);
     const [loading, setLoading] = useState(true);
     const [view, setView] = useState<'month' | 'day'>('month');
 
     // Edit Modal State
-    const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
-    const [editContent, setEditContent] = useState('');
-    const [newTime, setNewTime] = useState('');
-    const [saving, setSaving] = useState(false);
+    const [editingThread, setEditingThread] = useState<Thread | null>(null);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
     useEffect(() => {
         if (user) {
@@ -61,7 +56,7 @@ export const Calendar = () => {
 
         const { data, error } = await supabase
             .from('threads')
-            .select('id, content, scheduled_time, status')
+            .select('*')
             .not('scheduled_time', 'is', null)
             .gte('scheduled_time', start.toISOString())
             .lte('scheduled_time', end.toISOString());
@@ -74,32 +69,7 @@ export const Calendar = () => {
         setLoading(false);
     };
 
-    const handleUpdateEvent = async () => {
-        if (!editingEvent || !newTime) return;
-        setSaving(true);
-        try {
-            const { error } = await supabase
-                .from('threads')
-                .update({
-                    scheduled_time: new Date(newTime).toISOString(),
-                    content: editContent
-                })
-                .eq('id', editingEvent.id);
 
-            if (error) throw error;
-
-            setEvents(prev => prev.map(e =>
-                e.id === editingEvent.id
-                    ? { ...e, scheduled_time: new Date(newTime).toISOString(), content: editContent }
-                    : e
-            ));
-            setEditingEvent(null);
-        } catch (err: any) {
-            alert('Failed to update event: ' + err.message);
-        } finally {
-            setSaving(false);
-        }
-    };
 
     const handleDragStart = (e: React.DragEvent, eventId: string) => {
         e.dataTransfer.setData('eventId', eventId);
@@ -115,9 +85,11 @@ export const Calendar = () => {
         const event = events.find(ev => ev.id === eventId);
         if (!event) return;
 
-        const originalDate = new Date(event.scheduled_time);
         const newDate = new Date(date);
-        newDate.setHours(originalDate.getHours(), originalDate.getMinutes());
+        if (event.scheduled_time) {
+            const originalDate = new Date(event.scheduled_time);
+            newDate.setHours(originalDate.getHours(), originalDate.getMinutes());
+        }
 
         setEvents(prev => prev.map(ev =>
             ev.id === eventId ? { ...ev, scheduled_time: newDate.toISOString() } : ev
@@ -197,7 +169,7 @@ export const Calendar = () => {
             for (let i = 0; i < 7; i++) {
                 const cloneDay = day;
                 const dateKey = day.toISOString();
-                const dayEvents = events.filter(e => isSameDay(new Date(e.scheduled_time), cloneDay));
+                const dayEvents = events.filter(e => e.scheduled_time && isSameDay(new Date(e.scheduled_time), cloneDay));
                 const isCurrentMonth = isSameMonth(day, monthStart);
                 const isDayToday = isToday(day);
 
@@ -228,14 +200,13 @@ export const Calendar = () => {
                                     }}
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        setEditContent(event.content);
-                                        const date = new Date(event.scheduled_time);
-                                        const localIso = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-                                        setNewTime(localIso);
-                                        setEditingEvent(event);
+                                        if (event.status !== 'published') {
+                                            setEditingThread(event);
+                                            setIsCreateModalOpen(true);
+                                        }
                                     }}
                                 >
-                                    <span className="event-time">{format(new Date(event.scheduled_time), 'HH:mm')}</span>
+                                    <span className="event-time">{event.scheduled_time ? format(new Date(event.scheduled_time), 'HH:mm') : ''}</span>
                                     {event.content}
                                 </div>
                             ))}
@@ -277,6 +248,7 @@ export const Calendar = () => {
             <div className="day-view-container">
                 {hours.map(hour => {
                     const hourEvents = events.filter(e => {
+                        if (!e.scheduled_time) return false;
                         const eventDate = new Date(e.scheduled_time);
                         return isSameDay(eventDate, currentDate) && eventDate.getHours() === hour.getHours();
                     });
@@ -292,15 +264,14 @@ export const Calendar = () => {
                                         key={event.id}
                                         className={`day-event-card ${event.status}`}
                                         onClick={() => {
-                                            setEditContent(event.content);
-                                            const date = new Date(event.scheduled_time);
-                                            const localIso = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-                                            setNewTime(localIso);
-                                            setEditingEvent(event);
+                                            if (event.status !== 'published') {
+                                                setEditingThread(event);
+                                                setIsCreateModalOpen(true);
+                                            }
                                         }}
                                     >
                                         <span className="event-time-badge">
-                                            {format(new Date(event.scheduled_time), 'h:mm a')}
+                                            {event.scheduled_time ? format(new Date(event.scheduled_time), 'h:mm a') : ''}
                                         </span>
                                         {event.content}
                                     </div>
@@ -333,61 +304,20 @@ export const Calendar = () => {
             ) : view === 'month' ? renderMonthView() : renderDayView()}
 
             {/* Edit Modal */}
-            {editingEvent && (
-                <div className="modal-overlay">
-                    <div className="modal-content">
-                        <div className="modal-header">
-                            <h3>Edit Thread</h3>
-                            <button
-                                onClick={() => setEditingEvent(null)}
-                                className="close-btn"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Content</label>
-                            <textarea
-                                value={editContent}
-                                onChange={(e) => setEditContent(e.target.value)}
-                                className="form-textarea"
-                                rows={4}
-                            />
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Scheduled Time</label>
-                            <div className="form-input-container">
-                                <Clock size={16} style={{ color: '#a1a1aa' }} />
-                                <input
-                                    type="datetime-local"
-                                    value={newTime}
-                                    onChange={(e) => setNewTime(e.target.value)}
-                                    className="form-input"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="modal-actions">
-                            <button
-                                onClick={() => setEditingEvent(null)}
-                                className="btn-secondary"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleUpdateEvent}
-                                disabled={saving}
-                                className="btn-primary"
-                            >
-                                {saving && <Loader2 className="animate-spin" size={14} />}
-                                Save Changes
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <CreateThreadModal
+                isOpen={isCreateModalOpen || !!editingThread}
+                onClose={() => {
+                    setIsCreateModalOpen(false);
+                    setEditingThread(null);
+                }}
+                onSuccess={() => {
+                    fetchEvents();
+                    setIsCreateModalOpen(false);
+                    setEditingThread(null);
+                }}
+                threadToEdit={editingThread}
+            />
         </div>
     );
 };
+
