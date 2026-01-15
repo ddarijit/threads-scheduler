@@ -140,10 +140,39 @@ export const Queue = () => {
                 console.log('First comment published!');
             }
 
-            // 2. Update status in Supabase
+
+            // 2. Cleanup Media (as per user request to keep history text-only)
+            const mediaUrlsToDelete = thread.media_urls || [];
+            if (mediaUrlsToDelete.length > 0) {
+                console.log('Cleaning up storage for published thread...');
+                const filesToDelete = mediaUrlsToDelete.map(url => {
+                    const parts = url.split('/thread-media/');
+                    return parts[1]; // Get path after bucket name
+                }).filter(Boolean); // Filter out any nulls
+
+                if (filesToDelete.length > 0) {
+                    const { error: storageError } = await supabase.storage
+                        .from('thread-media')
+                        .remove(filesToDelete);
+
+                    if (storageError) {
+                        console.error('Failed to cleanup storage:', storageError);
+                        // We don't block publishing on this, just log it
+                    } else {
+                        console.log('Storage cleanup successful');
+                    }
+                }
+            }
+
+            // 3. Update status in Supabase
+            // Set media_urls to empty array so it shows as text-only in history
             const { error: dbError } = await supabase
                 .from('threads')
-                .update({ status: 'published', scheduled_time: new Date().toISOString() })
+                .update({
+                    status: 'published',
+                    scheduled_time: new Date().toISOString(),
+                    media_urls: []
+                })
                 .eq('id', thread.id);
 
             if (dbError) throw dbError;
