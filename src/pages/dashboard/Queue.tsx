@@ -147,7 +147,7 @@ export const Queue = () => {
             if (mediaUrlsToDelete.length > 0) {
                 console.log('Cleaning up storage for published thread...');
 
-                const API_URL = import.meta.env.PROD ? '/api' : (import.meta.env.VITE_API_URL || 'http://localhost:3000');
+                const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://threads-scheduler-backend.onrender.com' : 'http://localhost:3000');
 
                 // Delete files via backend R2
                 await Promise.all(mediaUrlsToDelete.map(async (url) => {
