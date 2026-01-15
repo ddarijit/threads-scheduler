@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { Database, Check, AlertCircle, XCircle } from 'lucide-react';
+import { useState, useEffect } from 'react'; // Added useEffect
+import { Database, Check, AlertCircle, XCircle, Users, Mail, Trash2 } from 'lucide-react'; // Added icons
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { InviteMemberModal } from '../../components/InviteMemberModal'; // Import Modal
 
 export const Settings = () => {
     const { user } = useAuth();
@@ -9,18 +10,53 @@ export const Settings = () => {
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     const [accounts, setAccounts] = useState<any[]>([]);
+    const [teamMembers, setTeamMembers] = useState<any[]>([]); // Store all access rows
     const [loadingAccounts, setLoadingAccounts] = useState(true);
 
-    // Fetch accounts on mount
-    useState(() => {
-        if (user) {
-            supabase.from('user_tokens').select('*').eq('user_id', user.id)
-                .then(({ data }) => {
-                    setAccounts(data || []);
-                    setLoadingAccounts(false);
-                });
+    const [inviteModalOpen, setInviteModalOpen] = useState(false);
+    const [selectedAccountForInvite, setSelectedAccountForInvite] = useState<{ id: string, name: string } | null>(null);
+
+    // Fetch accounts and team members on mount
+    const fetchData = async () => {
+        if (!user) return;
+        setLoadingAccounts(true);
+
+        // 1. Fetch My Accounts
+        const { data: myAccounts } = await supabase.from('user_tokens').select('*').eq('user_id', user.id);
+        setAccounts(myAccounts || []);
+
+        // 2. Fetch Team Members (who has access to my accounts)
+        // We only fetch where *I* am the owner.
+        const { data: members } = await supabase
+            .from('account_access')
+            .select('*')
+            .eq('owner_id', user.id);
+
+        setTeamMembers(members || []);
+        setLoadingAccounts(false);
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, [user]);
+
+    const handleOpenInvite = (threadsUserId: string, nickname: string) => {
+        setSelectedAccountForInvite({ id: threadsUserId, name: nickname });
+        setInviteModalOpen(true);
+    };
+
+    const handleRevokeAccess = async (accessId: string) => {
+        if (!confirm('Are you sure you want to revoke access for this user?')) return;
+
+        const { error } = await supabase.from('account_access').delete().eq('id', accessId);
+
+        if (error) {
+            setMessage({ type: 'error', text: 'Failed to revoke access' });
+        } else {
+            setTeamMembers(prev => prev.filter(m => m.id !== accessId));
+            setMessage({ type: 'success', text: 'Access revoked' });
         }
-    });
+    };
 
     const AccountList = () => {
         if (loadingAccounts) return <p className="text-sm text-gray-500 animate-pulse">Loading accounts...</p>;
@@ -31,41 +67,88 @@ export const Settings = () => {
         );
 
         return (
-            <div className="flex flex-col gap-3">
-                {accounts.map(acc => (
-                    <div key={acc.threads_user_id} className="group p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all duration-200 flex justify-between items-center">
-                        <div className="flex items-center gap-4">
-                            {/* Avatar / Initials */}
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-sm font-bold text-white shadow-inner flex-shrink-0">
-                                {acc.threads_user_id ? acc.threads_user_id.substring(0, 2).toUpperCase() : '??'}
+            <div className="flex flex-col gap-4">
+                {accounts.map(acc => {
+                    const members = teamMembers.filter(m => m.threads_user_id === acc.threads_user_id);
+
+                    return (
+                        <div key={acc.threads_user_id} className="p-5 rounded-xl bg-white/5 border border-white/10 transition-all duration-200">
+                            {/* Account Header */}
+                            <div className="flex justify-between items-center mb-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-sm font-bold text-white shadow-inner flex-shrink-0">
+                                        {acc.threads_user_id ? acc.threads_user_id.substring(0, 2).toUpperCase() : '??'}
+                                    </div>
+                                    <div>
+                                        <div className="text-sm font-semibold text-white">
+                                            {acc.nickname || `Threads User ${acc.threads_user_id.slice(0, 8)}`}
+                                        </div>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                                            <span className="text-xs text-gray-400 font-medium">Connected</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={async () => {
+                                        if (!confirm('Are you sure you want to disconnect this account?')) return;
+                                        await supabase.from('user_tokens').delete().match({ user_id: user?.id, threads_user_id: acc.threads_user_id });
+                                        setAccounts(prev => prev.filter(a => a.threads_user_id !== acc.threads_user_id));
+                                    }}
+                                    className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                    title="Disconnect Account"
+                                >
+                                    <XCircle size={20} />
+                                </button>
                             </div>
 
-                            {/* Info */}
-                            <div>
-                                <div className="text-sm font-semibold text-white">
-                                    {acc.nickname || `Threads User ${acc.threads_user_id.slice(0, 8)}`}
+                            {/* Team Section */}
+                            <div className="mt-4 pt-4 border-t border-white/10">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                                        <Users size={12} />
+                                        Team Members
+                                    </h4>
+                                    <button
+                                        onClick={() => handleOpenInvite(acc.threads_user_id, acc.nickname)}
+                                        className="text-xs bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded transition-colors flex items-center gap-1"
+                                    >
+                                        + Invite
+                                    </button>
                                 </div>
-                                <div className="flex items-center gap-1.5 mt-0.5">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
-                                    <span className="text-xs text-gray-400 font-medium">Connected</span>
-                                </div>
+
+                                {members.length === 0 ? (
+                                    <p className="text-xs text-gray-600 italic">No one else has access to this account.</p>
+                                ) : (
+                                    <div className="flex flex-col gap-2">
+                                        {members.map(member => (
+                                            <div key={member.id} className="flex justify-between items-center bg-black/20 p-2 rounded border border-white/5">
+                                                <div className="flex items-center gap-2">
+                                                    <Mail size={12} className="text-gray-500" />
+                                                    <span className="text-sm text-gray-300">{member.invite_email}</span>
+                                                    {member.status === 'pending' && (
+                                                        <span className="text-[10px] bg-yellow-500/20 text-yellow-500 px-1.5 py-0.5 rounded">Pending</span>
+                                                    )}
+                                                    {member.status === 'active' && (
+                                                        <span className="text-[10px] bg-green-500/20 text-green-500 px-1.5 py-0.5 rounded">Active</span>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRevokeAccess(member.id)}
+                                                    className="text-gray-500 hover:text-red-400 transition-colors p-1"
+                                                    title="Revoke Access"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
-
-                        {/* Actions */}
-                        <button
-                            onClick={async () => {
-                                if (!confirm('Are you sure you want to disconnect this account? Scheduled threads for this account may fail.')) return;
-                                await supabase.from('user_tokens').delete().match({ user_id: user?.id, threads_user_id: acc.threads_user_id });
-                                setAccounts(prev => prev.filter(a => a.threads_user_id !== acc.threads_user_id));
-                            }}
-                            className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                            title="Disconnect Account"
-                        >
-                            <XCircle size={20} />
-                        </button>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         );
     };
@@ -208,8 +291,15 @@ export const Settings = () => {
                         {message.text}
                     </div>
                 )}
-
             </div>
+
+            <InviteMemberModal
+                isOpen={inviteModalOpen}
+                onClose={() => setInviteModalOpen(false)}
+                threadsUserId={selectedAccountForInvite?.id || ''}
+                accountNickname={selectedAccountForInvite?.name}
+                onInviteSent={fetchData}
+            />
         </div>
     );
 };
