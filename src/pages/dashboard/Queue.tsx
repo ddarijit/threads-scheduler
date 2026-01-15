@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Clock, MoreHorizontal, AlertCircle, Send, Loader2, Trash2 } from 'lucide-react';
+import { Clock, MoreHorizontal, AlertCircle, Send, Loader2, Trash2, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { threadsApi } from '../../lib/threadsApi';
+import { ImportModal } from '../../components/ImportModal';
 import '../../styles/Queue.css';
 
 interface Thread {
@@ -23,6 +24,7 @@ export const Queue = () => {
     const [error, setError] = useState<string | null>(null);
     const [filter, setFilter] = useState<'all' | 'scheduled' | 'draft' | 'published'>('scheduled');
     const [stats, setStats] = useState({ scheduled: 0, drafts: 0, published: 0 });
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
     // New state for publishing
     const [publishingId, setPublishingId] = useState<string | null>(null);
@@ -172,12 +174,21 @@ export const Queue = () => {
             </div>
 
             <div className="queue-header">
-                <h3>Upcoming Threads</h3>
-                <div className="tabs">
-                    <button onClick={() => setFilter('scheduled')} className={`tab ${filter === 'scheduled' ? 'active' : ''}`}>Scheduled</button>
-                    <button onClick={() => setFilter('draft')} className={`tab ${filter === 'draft' ? 'active' : ''}`}>Drafts</button>
-                    <button onClick={() => setFilter('published')} className={`tab ${filter === 'published' ? 'active' : ''}`}>History</button>
+                <div>
+                    <h3>Upcoming Threads</h3>
+                    <div className="tabs">
+                        <button onClick={() => setFilter('scheduled')} className={`tab ${filter === 'scheduled' ? 'active' : ''}`}>Scheduled</button>
+                        <button onClick={() => setFilter('draft')} className={`tab ${filter === 'draft' ? 'active' : ''}`}>Drafts</button>
+                        <button onClick={() => setFilter('published')} className={`tab ${filter === 'published' ? 'active' : ''}`}>History</button>
+                    </div>
                 </div>
+                <button
+                    onClick={() => setIsImportModalOpen(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm border border-zinc-700 transition-colors"
+                >
+                    <FileSpreadsheet size={16} />
+                    Import
+                </button>
             </div>
 
             {!threadsToken && (
@@ -285,6 +296,16 @@ export const Queue = () => {
                     ))}
                 </div>
             )}
+
+
+            <ImportModal
+                isOpen={isImportModalOpen}
+                onClose={() => setIsImportModalOpen(false)}
+                onImportSuccess={() => {
+                    fetchThreads();
+                    fetchStats();
+                }}
+            />
         </div>
     );
 };
