@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { X, Upload, FileSpreadsheet, AlertCircle, Check } from 'lucide-react';
+import { X, Upload, FileSpreadsheet, AlertCircle, Check, Download } from 'lucide-react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import './ImportModal.css';
 
 interface ImportModalProps {
     isOpen: boolean;
@@ -28,9 +29,7 @@ export const ImportModal = ({ isOpen, onClose, onImportSuccess }: ImportModalPro
     if (!isOpen) return null;
 
     const processData = (data: any[]) => {
-        // Simple mapping: look for keys regardless of case
         const mappedData: ParsedThread[] = data.map((row: any) => {
-            // Find keys that match our expected columns (case-insensitive)
             const keys = Object.keys(row);
             const contentKey = keys.find(k => k.toLowerCase().includes('content')) || '';
             const timeKey = keys.find(k => k.toLowerCase().includes('time') || k.toLowerCase().includes('date') || k.toLowerCase().includes('schedule')) || '';
@@ -43,7 +42,7 @@ export const ImportModal = ({ isOpen, onClose, onImportSuccess }: ImportModalPro
                 media_urls: row[mediaKey] || '',
                 first_comment: row[commentKey] || ''
             };
-        }).filter(item => item.content && item.scheduled_time); // Filter invalid rows
+        }).filter(item => item.content && item.scheduled_time);
 
         if (mappedData.length === 0) {
             setError('No valid rows found. Please ensure your file has "content" and "scheduled_time" columns.');
@@ -96,15 +95,11 @@ export const ImportModal = ({ isOpen, onClose, onImportSuccess }: ImportModalPro
         setImporting(true);
         try {
             const threadsToInsert = previewData.map(item => {
-                // Parse scheduled time
                 let scheduledTime = new Date(item.scheduled_time);
                 if (isNaN(scheduledTime.getTime())) {
-                    // Try to parse basic formats if auto-parse fails, or default to tomorrow
                     scheduledTime = new Date(Date.now() + 86400000);
                 }
 
-                // Parse media URLs
-                // Assuming comma-separated
                 let mediaUrls: string[] = [];
                 if (item.media_urls) {
                     mediaUrls = item.media_urls.split(',').map(u => u.trim()).filter(u => u.length > 0);
@@ -114,7 +109,7 @@ export const ImportModal = ({ isOpen, onClose, onImportSuccess }: ImportModalPro
                     user_id: user.id,
                     content: item.content,
                     scheduled_time: scheduledTime.toISOString(),
-                    media_urls: mediaUrls, // Supabase expects array? Check schema if needed, usually Postgres array is mapped from JS array
+                    media_urls: mediaUrls,
                     first_comment: item.first_comment || null,
                     status: 'scheduled'
                 };
@@ -137,73 +132,81 @@ export const ImportModal = ({ isOpen, onClose, onImportSuccess }: ImportModalPro
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="glass-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col p-6 rounded-2xl border border-white/10 shadow-2xl bg-zinc-900/90">
-                <div className="flex justify-between items-center mb-6">
+        <div className="modal-overlay">
+            <div className="modal-content glass-panel">
+                <div className="modal-header">
                     <div>
-                        <h2 className="text-xl font-bold flex items-center gap-2">
-                            <FileSpreadsheet className="text-purple-400" />
+                        <h2 className="modal-title">
+                            <FileSpreadsheet className="text-purple-400" size={24} color="#a78bfa" />
                             Bulk Import Threads
                         </h2>
-                        <p className="text-sm text-zinc-400 mt-1">
+                        <p className="modal-subtitle">
                             Upload a CSV or Excel file to schedule multiple threads at once.
                         </p>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-lg transition-colors">
-                        <X size={20} className="text-zinc-400" />
+                    <button onClick={onClose} className="close-btn">
+                        <X size={20} />
                     </button>
                 </div>
 
-                <div className="space-y-6">
+                <div className="flex-col gap-4 flex">
                     {/* File Drop Zone */}
-                    <div className="border-2 border-dashed border-zinc-700 hover:border-purple-500/50 rounded-xl p-8 transition-colors flex flex-col items-center justify-center text-center bg-zinc-900/50">
-                        <Upload size={32} className="text-zinc-500 mb-3" />
-                        <p className="text-zinc-300 font-medium mb-1">
+                    <div className="drop-zone">
+                        <Upload size={32} color="#71717a" style={{ marginBottom: '12px' }} />
+                        <p style={{ color: '#d4d4d8', fontWeight: 500, marginBottom: '4px' }}>
                             {file ? file.name : "Click to upload or drag & drop"}
                         </p>
-                        <p className="text-xs text-zinc-500">
+                        <p style={{ fontSize: '12px', color: '#71717a' }}>
                             .CSV or .XLSX (Columns: content, scheduled_time, media_urls, first_comment)
                         </p>
                         <input
                             type="file"
                             accept=".csv, .xlsx, .xls"
-                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            className="file-input"
                             onChange={handleFileChange}
                         />
                     </div>
 
+                    <div className="flex justify-center gap-4 text-sm" style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '-0.5rem' }}>
+                        <a href="/templates/template.csv" download className="text-purple-400 hover:text-purple-300 flex items-center gap-1" style={{ color: '#a78bfa', display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}>
+                            <Download size={14} /> Download CSV Template
+                        </a>
+                        <span className="text-zinc-600" style={{ color: '#52525b' }}>|</span>
+                        <a href="/templates/template.xlsx" download className="text-purple-400 hover:text-purple-300 flex items-center gap-1" style={{ color: '#a78bfa', display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}>
+                            <Download size={14} /> Download Excel Template
+                        </a>
+                    </div>
+
                     {/* Error Message */}
                     {error && (
-                        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-lg text-sm flex items-start gap-2">
-                            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                        <div className="error-message">
+                            <AlertCircle size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
                             <div>{error}</div>
                         </div>
                     )}
 
                     {/* Preview Table */}
                     {previewData.length > 0 && (
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                                <h3 className="text-sm font-medium text-zinc-300">
-                                    Preview ({previewData.length} threads)
-                                </h3>
+                        <div className="preview-section">
+                            <div className="preview-title">
+                                Preview ({previewData.length} threads)
                             </div>
 
-                            <div className="glass rounded-lg overflow-hidden border border-white/5 max-h-[300px] overflow-y-auto">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-white/5 text-zinc-400 font-medium sticky top-0 backdrop-blur-md">
+                            <div className="table-container">
+                                <table className="preview-table">
+                                    <thead>
                                         <tr>
-                                            <th className="p-3">Content</th>
-                                            <th className="p-3">Schedule</th>
-                                            <th className="p-3">Media</th>
+                                            <th>Content</th>
+                                            <th>Schedule</th>
+                                            <th>Media</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-white/5 text-zinc-300">
+                                    <tbody>
                                         {previewData.map((row, i) => (
-                                            <tr key={i} className="hover:bg-white/5 transition-colors">
-                                                <td className="p-3 max-w-[200px] truncate" title={row.content}>{row.content}</td>
-                                                <td className="p-3 whitespace-nowrap">{row.scheduled_time}</td>
-                                                <td className="p-3 max-w-[100px] truncate" title={row.media_urls}>{row.media_urls || '-'}</td>
+                                            <tr key={i}>
+                                                <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.content}>{row.content}</td>
+                                                <td style={{ whiteSpace: 'nowrap' }}>{row.scheduled_time}</td>
+                                                <td style={{ maxWidth: '100px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.media_urls}>{row.media_urls || '-'}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -214,41 +217,41 @@ export const ImportModal = ({ isOpen, onClose, onImportSuccess }: ImportModalPro
 
                     {/* Example Template Info */}
                     {!previewData.length && !error && (
-                        <div className="bg-blue-500/5 border border-blue-500/10 rounded-lg p-4">
-                            <h4 className="text-xs font-bold text-blue-400 mb-2 uppercase tracking-wider">Required Columns</h4>
-                            <div className="grid grid-cols-2 gap-4 text-xs">
+                        <div className="info-box">
+                            <h4 className="info-title">Required Columns</h4>
+                            <div className="info-grid">
                                 <div>
-                                    <span className="text-zinc-300 font-mono bg-white/5 px-1 py-0.5 rounded">content</span>
-                                    <span className="text-zinc-500 block mt-1">The text of the thread</span>
+                                    <span className="info-tag">content</span>
+                                    <span className="info-desc">The text of the thread</span>
                                 </div>
                                 <div>
-                                    <span className="text-zinc-300 font-mono bg-white/5 px-1 py-0.5 rounded">scheduled_time</span>
-                                    <span className="text-zinc-500 block mt-1">ISO 8601 or YYYY-MM-DD HH:mm:ss</span>
+                                    <span className="info-tag">scheduled_time</span>
+                                    <span className="info-desc">ISO 8601 or YYYY-MM-DD HH:mm:ss</span>
                                 </div>
                                 <div>
-                                    <span className="text-zinc-300 font-mono bg-white/5 px-1 py-0.5 rounded">media_urls</span>
-                                    <span className="text-zinc-500 block mt-1">Comma-separated URLs (Optional)</span>
+                                    <span className="info-tag">media_urls</span>
+                                    <span className="info-desc">Comma-separated URLs</span>
                                 </div>
                                 <div>
-                                    <span className="text-zinc-300 font-mono bg-white/5 px-1 py-0.5 rounded">first_comment</span>
-                                    <span className="text-zinc-500 block mt-1">First comment text (Optional)</span>
+                                    <span className="info-tag">first_comment</span>
+                                    <span className="info-desc">First comment text</span>
                                 </div>
                             </div>
                         </div>
                     )}
                 </div>
 
-                <div className="mt-8 flex gap-3 justify-end">
+                <div className="modal-actions">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 text-zinc-400 hover:text-white transition-colors text-sm"
+                        className="btn-cancel"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleImport}
                         disabled={previewData.length === 0 || importing}
-                        className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all shadow-lg shadow-purple-900/20"
+                        className="btn-import"
                     >
                         {importing ? (
                             <>Importing...</>

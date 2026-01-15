@@ -1,0 +1,4 @@
+content,scheduled_time,media_urls,first_comment
+"Example Thread Post",2026-01-20T12:00:00,,
+"Thread with Media",2026-01-21T15:00:00,"https://example.com/image.jpg",
+"Thread with First Comment",2026-01-22T09:00:00,,"Link in bio!"

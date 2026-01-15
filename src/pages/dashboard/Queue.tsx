@@ -174,7 +174,7 @@ export const Queue = () => {
             </div>
 
             <div className="queue-header">
-                <div>
+                <div className="header-left">
                     <h3>Upcoming Threads</h3>
                     <div className="tabs">
                         <button onClick={() => setFilter('scheduled')} className={`tab ${filter === 'scheduled' ? 'active' : ''}`}>Scheduled</button>
@@ -184,7 +184,7 @@ export const Queue = () => {
                 </div>
                 <button
                     onClick={() => setIsImportModalOpen(true)}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm border border-zinc-700 transition-colors"
+                    className="btn-secondary"
                 >
                     <FileSpreadsheet size={16} />
                     Import
