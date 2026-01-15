@@ -17,7 +17,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Initialize Supabase Admin Client (Service Role)
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
