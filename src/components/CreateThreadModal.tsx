@@ -141,33 +141,49 @@ export const CreateThreadModal = ({ isOpen, onClose, onSuccess, threadToEdit }: 
             ? 'https://threads-scheduler-backend.onrender.com'
             : (import.meta.env.VITE_API_URL || 'http://localhost:3000');
 
-        const response = await fetch(`${API_URL}/generate-upload-url`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                fileName: file.name,
-                fileType: file.type,
-                userId: user?.id
-            })
-        });
+        console.log('DEBUG: Attempting upload via', API_URL);
+
+        let response;
+        try {
+            response = await fetch(`${API_URL}/generate-upload-url`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fileName: file.name,
+                    fileType: file.type,
+                    userId: user?.id
+                })
+            });
+        } catch (err: any) {
+            alert(`❌ Connection Failed!\nTarget: ${API_URL}\nError: ${err.message}\nMake sure your backend is running!`);
+            throw err;
+        }
 
         if (!response.ok) {
-            throw new Error('Failed to get upload URL');
+            const txt = await response.text();
+            alert(`❌ Backend Error!\nStatus: ${response.status}\nBody: ${txt}`);
+            throw new Error(`Failed to get upload URL: ${response.status}`);
         }
 
         const { uploadUrl, publicUrl } = await response.json();
 
         // 2. Upload to R2
-        const uploadResponse = await fetch(uploadUrl, {
-            method: 'PUT',
-            body: file,
-            headers: {
-                'Content-Type': file.type
-            }
-        });
+        try {
+            const uploadResponse = await fetch(uploadUrl, {
+                method: 'PUT',
+                body: file,
+                headers: {
+                    'Content-Type': file.type
+                }
+            });
 
-        if (!uploadResponse.ok) {
-            throw new Error('Failed to upload file to storage');
+            if (!uploadResponse.ok) {
+                alert(`❌ R2 Upload Failed! Status: ${uploadResponse.status}`);
+                throw new Error('Failed to upload file to storage');
+            }
+        } catch (err: any) {
+            alert(`❌ R2 Connection Failed!\nError: ${err.message}`);
+            throw err;
         }
 
         return publicUrl;
