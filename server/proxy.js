@@ -218,6 +218,8 @@ cron.schedule('*/10 * * * * *', async () => {
                 // --- C. Post First Comment (if exists) ---
                 if (thread.first_comment && publishedId) {
                     console.log(`[Cron] Posting first comment for thread ${thread.id}...`);
+                    await new Promise(r => setTimeout(r, 5000)); // Wait 5s for propagation
+
                     try {
                         const commentParams = new URLSearchParams();
                         commentParams.append('media_type', 'TEXT');
@@ -240,16 +242,15 @@ cron.schedule('*/10 * * * * *', async () => {
                     }
                 }
 
-                // 5. Mark as Published
+                // 5. Delete from Database (as requested by user)
                 await supabase
                     .from('threads')
-                    .update({
-                        status: 'published',
-                        scheduled_time: new Date().toISOString() // Update to actual publish time
-                    })
+                    .delete()
                     .eq('id', thread.id);
 
-                console.log(`[Cron] Successfully published thread ${thread.id}`);
+                console.log(`[Cron] Successfully published and deleted thread ${thread.id}`);
+
+
 
                 // --- 6. Cleanup Media (Save Storage) ---
                 if (mediaUrls.length > 0) {
@@ -282,14 +283,38 @@ cron.schedule('*/10 * * * * *', async () => {
             } catch (err) {
                 console.error(`[Cron] Failed to publish thread ${thread.id}:`, err.message);
 
-                // Mark as failed to stop retry loop
+                // --- FAILURE CLEANUP ---
+                // User requested failed data to be deleted from Supabase.
+
+                // 1. Clean Media
+                const failedMediaUrls = thread.media_urls || [];
+                if (failedMediaUrls.length > 0) {
+                    try {
+                        const pathsToDelete = failedMediaUrls.map(url => {
+                            try {
+                                const parts = url.split('/thread-media/');
+                                return parts.length > 1 ? parts[1] : null;
+                            } catch { return null; }
+                        }).filter(Boolean);
+
+                        if (pathsToDelete.length > 0) {
+                            console.log(`[Cron-Fail] Cleaning up ${pathsToDelete.length} media files...`);
+                            await supabase.storage.from('thread-media').remove(pathsToDelete);
+                        }
+                    } catch (cleanupErr) {
+                        console.error('[Cron-Fail] Error during media cleanup:', cleanupErr);
+                    }
+                }
+
+                // 2. Delete Row
                 await supabase
                     .from('threads')
-                    .update({ status: 'failed' })
+                    .delete()
                     .eq('id', thread.id);
+
+                console.log(`[Cron] Deleted failed thread ${thread.id}`);
             }
         }
-
     } catch (err) {
         console.error('[Cron] Unexpected error:', err);
     }
@@ -332,6 +357,23 @@ app.post('/exchange-token', async (req, res) => {
 
         if (data.error) {
             return res.status(400).json(data);
+        }
+
+        // --- EXCHANGE FOR LONG-LIVED TOKEN ---
+        try {
+            const longLivedResponse = await fetch(`https://graph.threads.net/access_token?grant_type=th_exchange_token&client_secret=${process.env.VITE_THREADS_APP_SECRET}&access_token=${data.access_token}`);
+            const longLivedData = await longLivedResponse.json();
+
+            if (longLivedData.access_token) {
+                console.log('Successfully upgraded to long-lived token');
+                data.access_token = longLivedData.access_token;
+                // data.expires_in = 60 * 24 * 60 * 60; // 60 days
+            } else {
+                console.warn('Failed to upgrade to long-lived token:', longLivedData);
+            }
+        } catch (exchangeErr) {
+            console.error('Error exchanging for long-lived token:', exchangeErr);
+            // Don't fail the whole request, just proceed with short-lived
         }
 
         return res.json(data);
