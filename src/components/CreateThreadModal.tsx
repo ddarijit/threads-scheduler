@@ -9,7 +9,7 @@ interface CreateThreadModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSuccess: () => void;
-    threadToEdit?: any; // Using any to avoid circular deps for now, or define partial interface
+    threadToEdit?: Thread | null;
 }
 
 export const CreateThreadModal = ({ isOpen, onClose, onSuccess, threadToEdit }: CreateThreadModalProps) => {
