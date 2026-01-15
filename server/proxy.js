@@ -415,6 +415,85 @@ app.post('/delete-file', async (req, res) => {
     }
 });
 
+// 3. Analytics Endpoint
+app.get('/analytics/:threadsUserId', async (req, res) => {
+    try {
+        const { threadsUserId } = req.params;
+
+        // 1. Get Access Token
+        const { data: tokenData, error: tokenError } = await supabase
+            .from('user_tokens')
+            .select('threads_access_token')
+            .eq('threads_user_id', threadsUserId)
+            .single();
+
+        if (tokenError || !tokenData) {
+            return res.status(404).json({ error: 'Threads account not found or not connected' });
+        }
+
+        const accessToken = tokenData.threads_access_token;
+
+        // 2. Fetch User Profile (Followers)
+        const profileRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,threads_biography,threads_profile_picture_url,followers_count&access_token=${accessToken}`);
+        const profile = await profileRes.json();
+
+        if (profile.error) throw new Error(profile.error.message);
+
+        // 3. Fetch Recent Threads (Engagement)
+        // Limit to 50 for MVP speed
+        const threadsRes = await fetch(`https://graph.threads.net/v1.0/me/threads?fields=id,likes_count,reply_count&limit=50&access_token=${accessToken}`);
+        const threadsData = await threadsRes.json();
+
+        let totalLikes = 0;
+        let totalReplies = 0;
+
+        if (threadsData.data) {
+            threadsData.data.forEach(t => {
+                totalLikes += (t.likes_count || 0);
+                totalReplies += (t.reply_count || 0);
+            });
+        }
+
+        // 4. Save Snapshot to Supabase
+        const today = new Date().toISOString().split('T')[0];
+
+        const snapshot = {
+            threads_user_id: threadsUserId,
+            date: today,
+            followers_count: profile.followers_count || 0,
+            total_likes: totalLikes,
+            total_replies: totalReplies
+        };
+
+        const { error: upsertError } = await supabase
+            .from('analytics_snapshots')
+            .upsert(snapshot, { onConflict: 'threads_user_id, date' });
+
+        if (upsertError) {
+            console.error('Error saving analytics snapshot:', upsertError);
+            // Don't fail the request, just log it. The schema might not be applied yet.
+        }
+
+        // 5. Fetch Historical Data (Last 30 Days)
+        const { data: history } = await supabase
+            .from('analytics_snapshots')
+            .select('*')
+            .eq('threads_user_id', threadsUserId)
+            .order('date', { ascending: true })
+            .limit(30);
+
+        res.json({
+            current: snapshot,
+            history: history || [],
+            profile: profile
+        });
+
+    } catch (error) {
+        console.error('Analytics Error:', error);
+        res.status(500).json({ error: 'Failed to fetch analytics', details: error.message });
+    }
+});
+
 app.post('/exchange-token', async (req, res) => {
     try {
         console.log('Received /exchange-token request');
