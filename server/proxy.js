@@ -433,8 +433,9 @@ app.get('/analytics/:threadsUserId', async (req, res) => {
 
         const accessToken = tokenData.threads_access_token;
 
-        // 2. Fetch User Profile (Followers)
-        const profileRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,threads_biography,threads_profile_picture_url,followers_count&access_token=${accessToken}`);
+        // 2. Fetch User Profile
+        // Note: followers_count is NOT available on the basic User node in Threads API.
+        const profileRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,threads_biography,threads_profile_picture_url&access_token=${accessToken}`);
         const profile = await profileRes.json();
 
         if (profile.error) throw new Error(profile.error.message);
@@ -460,7 +461,7 @@ app.get('/analytics/:threadsUserId', async (req, res) => {
         const snapshot = {
             threads_user_id: threadsUserId,
             date: today,
-            followers_count: profile.followers_count || 0,
+            followers_count: 0, // Not available in API
             total_likes: totalLikes,
             total_replies: totalReplies
         };
