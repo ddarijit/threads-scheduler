@@ -246,7 +246,14 @@ export const Queue = () => {
             ) : (
                 <div className="thread-list">
                     {threads.map((thread) => (
-                        <div key={thread.id} className="thread-card glass-panel">
+                        <div
+                            key={thread.id}
+                            className="thread-card glass-panel"
+                            style={{
+                                zIndex: activeMenu === thread.id ? 50 : 1,
+                                position: 'relative' // Ensure z-index works and stacking context is managed
+                            }}
+                        >
                             {thread.media_urls && thread.media_urls.length > 0 && (
                                 <div className="thread-media mb-3 flex gap-2 overflow-x-auto pb-2">
                                     {thread.media_urls.map((url, idx) => (
