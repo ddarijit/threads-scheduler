@@ -80,15 +80,25 @@ cron.schedule('*/10 * * * * *', async () => {
 
             try {
                 // 3. Get User Tokens
-                const { data: tokenData, error: tokenError } = await supabase
+                let tokenQuery = supabase
                     .from('user_tokens')
                     .select('threads_access_token, threads_user_id')
-                    .eq('user_id', thread.user_id)
-                    .single();
+                    .eq('user_id', thread.user_id);
 
-                if (tokenError || !tokenData) {
-                    throw new Error('User tokens not found for thread owner');
+                // If the thread has a specific account assigned, fetch that specific token.
+                // Otherwise (legacy threads), we accept any token (usually the first one connected).
+                if (thread.threads_user_id) {
+                    tokenQuery = tokenQuery.eq('threads_user_id', thread.threads_user_id);
                 }
+
+                const { data: tokenDataRaw, error: tokenError } = await tokenQuery;
+
+                if (tokenError || !tokenDataRaw || tokenDataRaw.length === 0) {
+                    throw new Error(`User tokens not found for thread owner ${thread.user_id} (Account: ${thread.threads_user_id || 'Any'})`);
+                }
+
+                // If multiple tokens returned (shouldn't happen with specific ID, but possible for legacy), take the first
+                const tokenData = tokenDataRaw[0];
 
                 // 4. Publish to Threads
                 console.log(`[Cron] Publishing thread ${thread.id} for user ${thread.user_id}`);

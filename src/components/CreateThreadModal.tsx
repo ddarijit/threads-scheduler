@@ -19,6 +19,31 @@ export const CreateThreadModal = ({ isOpen, onClose, onSuccess, threadToEdit }: 
     const [showFirstComment, setShowFirstComment] = useState(false);
     const [scheduledTime, setScheduledTime] = useState('');
 
+    const [accounts, setAccounts] = useState<any[]>([]);
+    const [selectedAccount, setSelectedAccount] = useState<string>('');
+
+    // Fetch accounts
+    useEffect(() => {
+        if (user) {
+            supabase.from('user_tokens').select('*').eq('user_id', user.id)
+                .then(({ data }) => {
+                    const accs = data || [];
+                    setAccounts(accs);
+                    if (accs.length > 0 && !selectedAccount) {
+                        // If editing, use the thread's account if possible, else default to first
+                        if (threadToEdit && (threadToEdit as any).threads_user_id) {
+                            setSelectedAccount((threadToEdit as any).threads_user_id);
+                        } else if (localStorage.getItem('threads_user_id')) {
+                            // Use last active or stored one
+                            setSelectedAccount(localStorage.getItem('threads_user_id') || accs[0].threads_user_id);
+                        } else {
+                            setSelectedAccount(accs[0].threads_user_id);
+                        }
+                    }
+                });
+        }
+    }, [user, threadToEdit]);
+
     // Media State
     // We need to handle both raw Files (new uploads) and string URLs (existing)
     // Actually simplicity: separate them? Or unified?
@@ -128,6 +153,17 @@ export const CreateThreadModal = ({ isOpen, onClose, onSuccess, threadToEdit }: 
         e.preventDefault();
         if (!content.trim() && mediaItems.length === 0) return;
 
+        if (!selectedAccount && accounts.length > 0) {
+            alert('Please select an account to post to.');
+            return;
+        }
+
+        // Fallback for no accounts connected
+        if (accounts.length === 0 && !selectedAccount) {
+            alert('No connected Threads account found. Please connect in Settings.');
+            return;
+        }
+
         setLoading(true);
         try {
             let finalMediaUrls: string[] = [];
@@ -153,7 +189,8 @@ export const CreateThreadModal = ({ isOpen, onClose, onSuccess, threadToEdit }: 
                 first_comment: firstComment.trim() || null,
                 scheduled_time: scheduledTime ? new Date(scheduledTime).toISOString() : null,
                 status,
-                media_urls: finalMediaUrls.length > 0 ? finalMediaUrls : null
+                media_urls: finalMediaUrls.length > 0 ? finalMediaUrls : null,
+                threads_user_id: selectedAccount // NEW: Save the selected account
             };
 
             if (threadToEdit) {
@@ -197,6 +234,24 @@ export const CreateThreadModal = ({ isOpen, onClose, onSuccess, threadToEdit }: 
                 </div>
 
                 <form onSubmit={handleSubmit}>
+                    {/* Account Selector */}
+                    {accounts.length > 0 && (
+                        <div className="form-group mb-3">
+                            <label className="text-xs text-gray-400 mb-1 block">Post to</label>
+                            <select
+                                value={selectedAccount}
+                                onChange={(e) => setSelectedAccount(e.target.value)}
+                                className="glass-input text-sm p-2 w-full"
+                            >
+                                {accounts.map(acc => (
+                                    <option key={acc.threads_user_id} value={acc.threads_user_id}>
+                                        Threads User ({acc.threads_user_id.slice(0, 6)}...)
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
                     <div className="form-group">
                         <textarea
                             placeholder="What's new?"

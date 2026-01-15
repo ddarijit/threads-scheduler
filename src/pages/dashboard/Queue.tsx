@@ -16,6 +16,7 @@ interface Thread {
     created_at: string;
     media_urls?: string[] | null;
     error_message?: string | null;
+    threads_user_id?: string | null;
 }
 
 export type { Thread }; // Export for CreateThreadModal
@@ -292,6 +293,12 @@ export const Queue = () => {
                                     {thread.status === 'failed' && thread.error_message && (
                                         <div className="mt-1 text-xs text-red-400 bg-red-500/10 p-2 rounded border border-red-500/20">
                                             Error: {thread.error_message}
+                                        </div>
+                                    )}
+                                    {thread.threads_user_id && (
+                                        <div className="flex items-center gap-1 text-xs text-purple-400 bg-purple-500/10 py-1 px-2 rounded border border-purple-500/20">
+                                            <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                                            @{thread.threads_user_id.slice(0, 10)}...
                                         </div>
                                     )}
                                 </div>

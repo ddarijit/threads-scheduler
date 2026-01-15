@@ -12,8 +12,14 @@ export const AuthCallback = () => {
 
     useEffect(() => {
         const code = searchParams.get('code');
+        const error = searchParams.get('error');
+        const errorDescription = searchParams.get('error_description');
+
         if (code) {
             exchangeToken(code);
+        } else if (error) {
+            setStatus('error');
+            setMessage(errorDescription || `Error: ${error}`);
         } else {
             setStatus('error');
             setMessage('No authorization code received.');
@@ -54,6 +60,8 @@ export const AuthCallback = () => {
                     threads_access_token: data.access_token,
                     threads_user_id: data.user_id,
                     updated_at: new Date().toISOString()
+                }, {
+                    onConflict: 'user_id, threads_user_id'
                 });
 
             if (error) throw error;
