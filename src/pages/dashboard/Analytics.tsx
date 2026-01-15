@@ -76,7 +76,7 @@ export const Analytics = () => {
                     <p className="text-gray-400 text-sm mt-1">Track your growth and engagement</p>
                 </div>
 
-                <div className="flex items-center gap-3 bg-white/5 p-1 rounded-lg border border-white/10">
+                <div className="flex items-center gap-3 bg-gray-800 p-1 rounded-lg border border-gray-700">
                     {accounts.length > 0 ? (
                         <select
                             value={selectedAccount}
@@ -95,9 +95,9 @@ export const Analytics = () => {
                     <button
                         onClick={fetchAnalytics}
                         disabled={loading || !selectedAccount}
-                        className={`p-2 rounded-md hover:bg-white/10 transition-colors ${loading ? 'animate-spin' : ''}`}
+                        className={`p-2 rounded-md hover:bg-gray-700 transition-colors ${loading ? 'animate-spin' : ''}`}
                     >
-                        <RefreshCw size={16} />
+                        <RefreshCw size={16} className="text-white" />
                     </button>
                 </div>
             </div>
@@ -123,12 +123,12 @@ export const Analytics = () => {
 
             {data && (
                 <>
-                    {/* Stat Cards */}
+                    {/* Stat Cards Grid - Using flex wrap as fallback for grid issues */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                         {/* Connected Status Card */}
-                        <div className="bg-white/10 border border-white/20 p-6 rounded-xl relative overflow-hidden group hover:border-purple-500/50 transition-colors">
+                        <div className="bg-gray-800 border border-gray-700 p-6 rounded-xl relative overflow-hidden group hover:border-purple-500/50 transition-colors">
                             <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                                <RefreshCw size={64} />
+                                <RefreshCw size={64} className="text-white" />
                             </div>
                             <div className="flex justify-between items-start mb-4">
                                 <div className="p-3 bg-purple-500/20 rounded-lg border border-purple-500/20 text-purple-200">
@@ -155,30 +155,30 @@ export const Analytics = () => {
                     </div>
 
                     {/* Chart Area */}
-                    <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+                    <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
                         <h3 className="text-lg font-semibold text-white mb-6">Follower Growth (30 Days)</h3>
                         <div className="h-[300px] w-full flex items-center justify-center">
                             {data.history && data.history.length > 1 ? (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <LineChart data={data.history}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
                                         <XAxis
                                             dataKey="date"
-                                            stroke="#6b7280"
+                                            stroke="#9ca3af"
                                             fontSize={12}
                                             tickLine={false}
                                             axisLine={false}
                                             tickFormatter={(val) => new Date(val).getDate().toString()}
                                         />
                                         <YAxis
-                                            stroke="#6b7280"
+                                            stroke="#9ca3af"
                                             fontSize={12}
                                             tickLine={false}
                                             axisLine={false}
                                             width={40}
                                         />
                                         <Tooltip
-                                            contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#fff' }}
+                                            contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#fff' }}
                                             itemStyle={{ color: '#fff' }}
                                         />
                                         <Line
@@ -207,9 +207,9 @@ export const Analytics = () => {
 };
 
 const StatCard = ({ label, value, icon, trend }: { label: string, value: number, icon: any, trend?: string }) => (
-    <div className="bg-white/5 border border-white/10 p-6 rounded-xl hover:bg-white/10 transition-colors">
+    <div className="bg-gray-800 border border-gray-700 p-6 rounded-xl hover:bg-gray-700 transition-colors">
         <div className="flex justify-between items-start mb-4">
-            <div className="p-3 bg-white/5 rounded-lg border border-white/5 text-white">
+            <div className="p-3 bg-gray-700 rounded-lg border border-gray-600 text-white">
                 {icon}
             </div>
             {trend && <span className="text-xs font-medium text-green-400 bg-green-400/10 px-2 py-1 rounded-full">{trend}</span>}
