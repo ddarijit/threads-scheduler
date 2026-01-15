@@ -136,7 +136,10 @@ export const CreateThreadModal = ({ isOpen, onClose, onSuccess, threadToEdit }: 
 
     const uploadMedia = async (file: File) => {
         // 1. Get Presigned URL
-        const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://threads-scheduler-backend.onrender.com' : 'http://localhost:3000');
+        // FORCE Render URL in production to avoid Vercel env var overrides
+        const API_URL = import.meta.env.PROD
+            ? 'https://threads-scheduler-backend.onrender.com'
+            : (import.meta.env.VITE_API_URL || 'http://localhost:3000');
 
         const response = await fetch(`${API_URL}/generate-upload-url`, {
             method: 'POST',
