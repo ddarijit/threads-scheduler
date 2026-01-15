@@ -10,6 +10,7 @@ export const Analytics = () => {
     const [selectedAccount, setSelectedAccount] = useState<string>('');
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState<any>(null);
+    const [error, setError] = useState<string | null>(null);
 
     // 1. Fetch Connected Accounts
     useEffect(() => {
@@ -18,7 +19,8 @@ export const Analytics = () => {
                 .then(({ data }) => {
                     if (data && data.length > 0) {
                         setAccounts(data);
-                        setSelectedAccount(data[0].threads_user_id);
+                        // Only set default if not already set (prevents reset on re-renders)
+                        if (!selectedAccount) setSelectedAccount(data[0].threads_user_id);
                     }
                 });
         }
@@ -28,14 +30,29 @@ export const Analytics = () => {
     const fetchAnalytics = async () => {
         if (!selectedAccount) return;
         setLoading(true);
+        setError(null);
         try {
             const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://threads-scheduler-backend.onrender.com' : 'http://localhost:3000');
+            console.log('Fetching analytics from:', `${API_URL}/analytics/${selectedAccount}`);
+
             const res = await fetch(`${API_URL}/analytics/${selectedAccount}`);
-            if (!res.ok) throw new Error('Failed to fetch analytics');
-            const json = await res.json();
+            const text = await res.text();
+
+            if (!res.ok) {
+                // Try to parse error json
+                try {
+                    const errJson = JSON.parse(text);
+                    throw new Error(errJson.error || `Server Error ${res.status}`);
+                } catch (e) {
+                    throw new Error(`Failed to fetch: ${res.status} ${text}`);
+                }
+            }
+
+            const json = JSON.parse(text);
             setData(json);
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
+            setError(err.message);
         } finally {
             setLoading(false);
         }
@@ -88,6 +105,19 @@ export const Analytics = () => {
             {loading && !data && (
                 <div className="flex justify-center py-20">
                     <div className="text-gray-500 animate-pulse">Loading insights...</div>
+                </div>
+            )}
+
+            {error && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-xl mb-8 flex items-center gap-3">
+                    <div className="p-2 bg-red-500/20 rounded-full">⚠️</div>
+                    <div>
+                        <div className="font-semibold">Failed to load analytics</div>
+                        <div className="text-sm opacity-80">{error}</div>
+                    </div>
+                    <button onClick={fetchAnalytics} className="ml-auto px-3 py-1 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-sm transition-colors">
+                        Retry
+                    </button>
                 </div>
             )}
 
