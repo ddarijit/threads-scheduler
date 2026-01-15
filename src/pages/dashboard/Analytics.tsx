@@ -125,79 +125,79 @@ export const Analytics = () => {
                 <>
                     {/* Stat Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                        {/* 
-                           Note: Followers count is not available in basic Threads API.
-                           Replacing with "Active Posts" for now.
-                        */}
-                        <StatCard
-                            label="Active Posts (Recent)"
-                            value={data.profile.threads_biography ? 50 : 0} // Placeholder logic or we can pass total threads length relative to limit
-                            // Actually, let's just make it "Total Likes" centric or just hide it.
-                            // Better: "Connection Status: Active"
-                            icon={<Users className="text-blue-400" />}
-                        // We don't have this data, let's just hide the value or use a dummy
-                        // Let's use it for "Est. Reach" (likes * 10)? No that's fake.
-                        // Let's just Remove it in next step or change label.
-                        />
-                        <div className="bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 p-6 rounded-xl">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="p-3 bg-white/5 rounded-lg border border-white/5 text-white">
-                                    <Users className="text-blue-400" />
-                                </div>
-                                <span className="text-xs font-medium text-green-400 bg-green-400/10 px-2 py-1 rounded-full">Active</span>
+                        {/* Connected Status Card */}
+                        <div className="bg-white/10 border border-white/20 p-6 rounded-xl relative overflow-hidden group hover:border-purple-500/50 transition-colors">
+                            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <RefreshCw size={64} />
                             </div>
-                            <div className="text-3xl font-bold text-white mb-1">Connected</div>
-                            <div className="text-sm text-gray-400">@{data.profile.username}</div>
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="p-3 bg-purple-500/20 rounded-lg border border-purple-500/20 text-purple-200">
+                                    <Users size={24} />
+                                </div>
+                                <span className="text-xs font-bold text-green-400 bg-green-400/10 border border-green-400/20 px-2 py-1 rounded-full">
+                                    ACTIVE
+                                </span>
+                            </div>
+                            <div className="text-2xl font-bold text-white mb-1 truncate">@{data.profile.username}</div>
+                            <div className="text-sm text-gray-400">Connected Account</div>
                         </div>
 
                         <StatCard
                             label="Total Likes (Recent)"
                             value={data.current.total_likes}
-                            icon={<Heart className="text-red-400" />}
+                            icon={<Heart className="text-red-400" size={24} />}
                         />
                         <StatCard
                             label="Total Replies (Recent)"
                             value={data.current.total_replies}
-                            icon={<MessageCircle className="text-green-400" />}
+                            icon={<MessageCircle className="text-blue-400" size={24} />}
                         />
                     </div>
 
                     {/* Chart Area */}
                     <div className="bg-white/5 border border-white/10 rounded-xl p-6">
                         <h3 className="text-lg font-semibold text-white mb-6">Follower Growth (30 Days)</h3>
-                        <div className="h-[300px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={data.history}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-                                    <XAxis
-                                        dataKey="date"
-                                        stroke="#6b7280"
-                                        fontSize={12}
-                                        tickLine={false}
-                                        axisLine={false}
-                                        tickFormatter={(val) => new Date(val).getDate().toString()}
-                                    />
-                                    <YAxis
-                                        stroke="#6b7280"
-                                        fontSize={12}
-                                        tickLine={false}
-                                        axisLine={false}
-                                        width={40}
-                                    />
-                                    <Tooltip
-                                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#fff' }}
-                                        itemStyle={{ color: '#fff' }}
-                                    />
-                                    <Line
-                                        type="monotone"
-                                        dataKey="followers_count"
-                                        stroke="#8b5cf6"
-                                        strokeWidth={3}
-                                        dot={{ fill: '#8b5cf6', strokeWidth: 2 }}
-                                        activeDot={{ r: 6 }}
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
+                        <div className="h-[300px] w-full flex items-center justify-center">
+                            {data.history && data.history.length > 1 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={data.history}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+                                        <XAxis
+                                            dataKey="date"
+                                            stroke="#6b7280"
+                                            fontSize={12}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            tickFormatter={(val) => new Date(val).getDate().toString()}
+                                        />
+                                        <YAxis
+                                            stroke="#6b7280"
+                                            fontSize={12}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            width={40}
+                                        />
+                                        <Tooltip
+                                            contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#fff' }}
+                                            itemStyle={{ color: '#fff' }}
+                                        />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="followers_count"
+                                            stroke="#8b5cf6"
+                                            strokeWidth={3}
+                                            dot={{ fill: '#8b5cf6', strokeWidth: 2 }}
+                                            activeDot={{ r: 6 }}
+                                        />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="text-center text-gray-500">
+                                    <BarChartIcon size={48} className="mx-auto mb-3 opacity-20" />
+                                    <p>Not enough data yet.</p>
+                                    <p className="text-sm opacity-60">Check back tomorrow to see your growth trend!</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </>
@@ -207,7 +207,7 @@ export const Analytics = () => {
 };
 
 const StatCard = ({ label, value, icon, trend }: { label: string, value: number, icon: any, trend?: string }) => (
-    <div className="bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 p-6 rounded-xl">
+    <div className="bg-white/5 border border-white/10 p-6 rounded-xl hover:bg-white/10 transition-colors">
         <div className="flex justify-between items-start mb-4">
             <div className="p-3 bg-white/5 rounded-lg border border-white/5 text-white">
                 {icon}
