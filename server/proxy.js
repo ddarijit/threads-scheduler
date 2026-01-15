@@ -14,8 +14,17 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
-app.use(cors());
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
+
+// Health Check
+app.get('/', (req, res) => {
+    res.send('Threads Scheduler Backend is Running! 🚀');
+});
 
 const PORT = process.env.PORT || 3000;
 
