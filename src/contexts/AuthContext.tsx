@@ -22,11 +22,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // Helper to claim invites
+        const claimInvites = async (currentUser: User) => {
+            if (!currentUser.email) return;
+
+            // RLS ensures we only see invites where invite_email == auth.jwt.email
+            const { data: pending } = await supabase
+                .from('account_access')
+                .select('id')
+                .is('member_id', null);
+
+            if (pending && pending.length > 0) {
+                await supabase
+                    .from('account_access')
+                    .update({ member_id: currentUser.id, status: 'active' })
+                    .in('id', pending.map(p => p.id));
+                console.log('Accepted team invites:', pending.length);
+            }
+        };
+
         // Get initial session
         supabase.auth.getSession().then(({ data: { session } }) => {
             setSession(session);
-            setUser(session?.user ?? null);
+            const currentUser = session?.user ?? null;
+            setUser(currentUser);
             setLoading(false);
+            if (currentUser) claimInvites(currentUser);
         });
 
         // Listen for auth changes
@@ -34,8 +55,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             data: { subscription },
         } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
-            setUser(session?.user ?? null);
+            const currentUser = session?.user ?? null;
+            setUser(currentUser);
             setLoading(false);
+            if (currentUser) claimInvites(currentUser);
         });
 
         return () => subscription.unsubscribe();
