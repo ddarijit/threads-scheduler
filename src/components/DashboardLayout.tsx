@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Calendar, Settings, CreditCard, LogOut, PlusSquare } from 'lucide-react';
+import { LayoutDashboard, Calendar, Settings, CreditCard, LogOut, PlusSquare, BarChart } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import './DashboardLayout.css';
 
@@ -21,6 +21,7 @@ const Sidebar = () => {
             <nav>
                 <SidebarLink to="/dashboard" end icon={<LayoutDashboard size={20} />} label="Queue" />
                 <SidebarLink to="/dashboard/calendar" icon={<Calendar size={20} />} label="Calendar" />
+                <SidebarLink to="/dashboard/analytics" icon={<BarChart size={20} />} label="Analytics" />
                 <SidebarLink to="/dashboard/settings" icon={<Settings size={20} />} label="Settings" />
                 <SidebarLink to="/dashboard/billing" icon={<CreditCard size={20} />} label="Billing" />
             </nav>

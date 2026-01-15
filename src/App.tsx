@@ -10,6 +10,7 @@ import { Queue } from './pages/dashboard/Queue';
 import { Calendar } from './pages/dashboard/Calendar';
 import { Settings } from './pages/dashboard/Settings';
 import { Billing } from './pages/dashboard/Billing';
+import { Analytics } from './pages/dashboard/Analytics';
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<Queue />} />
               <Route path="calendar" element={<Calendar />} />
+              <Route path="analytics" element={<Analytics />} />
               <Route path="settings" element={<Settings />} />
               <Route path="billing" element={<Billing />} />
             </Route>
