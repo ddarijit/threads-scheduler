@@ -15,7 +15,7 @@ export const Analytics = () => {
     // 1. Fetch Connected Accounts
     useEffect(() => {
         if (user) {
-            supabase.from('user_tokens').select('*').eq('user_id', user.id)
+            supabase.from('user_tokens').select('*')
                 .then(({ data }) => {
                     if (data && data.length > 0) {
                         setAccounts(data);

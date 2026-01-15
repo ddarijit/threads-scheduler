@@ -21,12 +21,11 @@ export const Settings = () => {
         if (!user) return;
         setLoadingAccounts(true);
 
-        // 1. Fetch My Accounts
-        const { data: myAccounts } = await supabase.from('user_tokens').select('*').eq('user_id', user.id);
-        setAccounts(myAccounts || []);
+        // 1. Fetch My Accounts & Shared Accounts (RLS handles visibility)
+        const { data: allAccounts } = await supabase.from('user_tokens').select('*');
+        setAccounts(allAccounts || []);
 
-        // 2. Fetch Team Members (who has access to my accounts)
-        // We only fetch where *I* am the owner.
+        // 2. Fetch Team Members (OUTBOUND invites I sent)
         const { data: members } = await supabase
             .from('account_access')
             .select('*')
@@ -60,6 +59,10 @@ export const Settings = () => {
 
     const AccountList = () => {
         if (loadingAccounts) return <p className="text-sm text-gray-500 animate-pulse">Loading accounts...</p>;
+
+        const myAccounts = accounts.filter(acc => acc.user_id === user?.id);
+        const sharedAccounts = accounts.filter(acc => acc.user_id !== user?.id);
+
         if (accounts.length === 0) return (
             <div className="p-4 rounded-lg bg-white/5 border border-white/10 text-center">
                 <p className="text-sm text-gray-400">No accounts connected yet.</p>
@@ -67,88 +70,124 @@ export const Settings = () => {
         );
 
         return (
-            <div className="flex flex-col gap-4">
-                {accounts.map(acc => {
-                    const members = teamMembers.filter(m => m.threads_user_id === acc.threads_user_id);
+            <div className="flex flex-col gap-8">
+                {/* My Accounts */}
+                <div>
+                    <h4 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">My Accounts</h4>
+                    {myAccounts.length === 0 ? <p className="text-sm text-gray-500 italic">You haven't connected any accounts.</p> : (
+                        <div className="flex flex-col gap-4">
+                            {myAccounts.map(acc => {
+                                const members = teamMembers.filter(m => m.threads_user_id === acc.threads_user_id);
 
-                    return (
-                        <div key={acc.threads_user_id} className="p-5 rounded-xl bg-white/5 border border-white/10 transition-all duration-200">
-                            {/* Account Header */}
-                            <div className="flex justify-between items-center mb-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-sm font-bold text-white shadow-inner flex-shrink-0">
-                                        {acc.threads_user_id ? acc.threads_user_id.substring(0, 2).toUpperCase() : '??'}
-                                    </div>
-                                    <div>
-                                        <div className="text-sm font-semibold text-white">
-                                            {acc.nickname || `Threads User ${acc.threads_user_id.slice(0, 8)}`}
-                                        </div>
-                                        <div className="flex items-center gap-1.5 mt-0.5">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
-                                            <span className="text-xs text-gray-400 font-medium">Connected</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <button
-                                    onClick={async () => {
-                                        if (!confirm('Are you sure you want to disconnect this account?')) return;
-                                        await supabase.from('user_tokens').delete().match({ user_id: user?.id, threads_user_id: acc.threads_user_id });
-                                        setAccounts(prev => prev.filter(a => a.threads_user_id !== acc.threads_user_id));
-                                    }}
-                                    className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                    title="Disconnect Account"
-                                >
-                                    <XCircle size={20} />
-                                </button>
-                            </div>
-
-                            {/* Team Section */}
-                            <div className="mt-4 pt-4 border-t border-white/10">
-                                <div className="flex justify-between items-center mb-3">
-                                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                                        <Users size={12} />
-                                        Team Members
-                                    </h4>
-                                    <button
-                                        onClick={() => handleOpenInvite(acc.threads_user_id, acc.nickname)}
-                                        className="text-xs bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded transition-colors flex items-center gap-1"
-                                    >
-                                        + Invite
-                                    </button>
-                                </div>
-
-                                {members.length === 0 ? (
-                                    <p className="text-xs text-gray-600 italic">No one else has access to this account.</p>
-                                ) : (
-                                    <div className="flex flex-col gap-2">
-                                        {members.map(member => (
-                                            <div key={member.id} className="flex justify-between items-center bg-black/20 p-2 rounded border border-white/5">
-                                                <div className="flex items-center gap-2">
-                                                    <Mail size={12} className="text-gray-500" />
-                                                    <span className="text-sm text-gray-300">{member.invite_email}</span>
-                                                    {member.status === 'pending' && (
-                                                        <span className="text-[10px] bg-yellow-500/20 text-yellow-500 px-1.5 py-0.5 rounded">Pending</span>
-                                                    )}
-                                                    {member.status === 'active' && (
-                                                        <span className="text-[10px] bg-green-500/20 text-green-500 px-1.5 py-0.5 rounded">Active</span>
-                                                    )}
+                                return (
+                                    <div key={acc.threads_user_id} className="p-5 rounded-xl bg-white/5 border border-white/10 transition-all duration-200">
+                                        {/* Account Header */}
+                                        <div className="flex justify-between items-center mb-4">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-sm font-bold text-white shadow-inner flex-shrink-0">
+                                                    {acc.threads_user_id ? acc.threads_user_id.substring(0, 2).toUpperCase() : '??'}
                                                 </div>
+                                                <div>
+                                                    <div className="text-sm font-semibold text-white">
+                                                        {acc.nickname || `Threads User ${acc.threads_user_id.slice(0, 8)}`}
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                                                        <span className="text-xs text-gray-400 font-medium">Connected (Owner)</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <button
+                                                onClick={async () => {
+                                                    if (!confirm('Are you sure you want to disconnect this account?')) return;
+                                                    await supabase.from('user_tokens').delete().match({ user_id: user?.id, threads_user_id: acc.threads_user_id });
+                                                    setAccounts(prev => prev.filter(a => a.threads_user_id !== acc.threads_user_id));
+                                                }}
+                                                className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                                title="Disconnect Account"
+                                            >
+                                                <XCircle size={20} />
+                                            </button>
+                                        </div>
+
+                                        {/* Team Section */}
+                                        <div className="mt-4 pt-4 border-t border-white/10">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                                                    <Users size={12} />
+                                                    Team Members
+                                                </h4>
                                                 <button
-                                                    onClick={() => handleRevokeAccess(member.id)}
-                                                    className="text-gray-500 hover:text-red-400 transition-colors p-1"
-                                                    title="Revoke Access"
+                                                    onClick={() => handleOpenInvite(acc.threads_user_id, acc.nickname)}
+                                                    className="text-xs bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded transition-colors flex items-center gap-1"
                                                 >
-                                                    <Trash2 size={12} />
+                                                    + Invite
                                                 </button>
                                             </div>
-                                        ))}
+
+                                            {members.length === 0 ? (
+                                                <p className="text-xs text-gray-600 italic">No one else has access to this account.</p>
+                                            ) : (
+                                                <div className="flex flex-col gap-2">
+                                                    {members.map(member => (
+                                                        <div key={member.id} className="flex justify-between items-center bg-black/20 p-2 rounded border border-white/5">
+                                                            <div className="flex items-center gap-2">
+                                                                <Mail size={12} className="text-gray-500" />
+                                                                <span className="text-sm text-gray-300">{member.invite_email}</span>
+                                                                {member.status === 'pending' && (
+                                                                    <span className="text-[10px] bg-yellow-500/20 text-yellow-500 px-1.5 py-0.5 rounded">Pending</span>
+                                                                )}
+                                                                {member.status === 'active' && (
+                                                                    <span className="text-[10px] bg-green-500/20 text-green-500 px-1.5 py-0.5 rounded">Active</span>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                onClick={() => handleRevokeAccess(member.id)}
+                                                                className="text-gray-500 hover:text-red-400 transition-colors p-1"
+                                                                title="Revoke Access"
+                                                            >
+                                                                <Trash2 size={12} />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                )}
-                            </div>
+                                );
+                            })}
                         </div>
-                    );
-                })}
+                    )}
+                </div>
+
+                {/* Shared Accounts */}
+                {sharedAccounts.length > 0 && (
+                    <div>
+                        <h4 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">Shared With Me</h4>
+                        <div className="flex flex-col gap-4">
+                            {sharedAccounts.map(acc => (
+                                <div key={acc.threads_user_id} className="p-5 rounded-xl bg-white/5 border border-white/10 flex justify-between items-center">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 flex items-center justify-center text-sm font-bold text-white shadow-inner flex-shrink-0">
+                                            {acc.threads_user_id ? acc.threads_user_id.substring(0, 2).toUpperCase() : '??'}
+                                        </div>
+                                        <div>
+                                            <div className="text-sm font-semibold text-white">
+                                                {acc.nickname || `Threads User ${acc.threads_user_id.slice(0, 8)}`}
+                                            </div>
+                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]"></span>
+                                                <span className="text-xs text-blue-400 font-medium">Team Access</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {/* No actions for shared accounts (can't delete/invite) */}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         );
     };

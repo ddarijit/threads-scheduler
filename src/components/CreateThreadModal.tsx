@@ -25,7 +25,7 @@ export const CreateThreadModal = ({ isOpen, onClose, onSuccess, threadToEdit }: 
     // Fetch accounts
     useEffect(() => {
         if (user) {
-            supabase.from('user_tokens').select('*').eq('user_id', user.id)
+            supabase.from('user_tokens').select('*')
                 .then(({ data }) => {
                     const accs = data || [];
                     setAccounts(accs);
