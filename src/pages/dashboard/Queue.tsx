@@ -146,23 +146,22 @@ export const Queue = () => {
             const mediaUrlsToDelete = thread.media_urls || [];
             if (mediaUrlsToDelete.length > 0) {
                 console.log('Cleaning up storage for published thread...');
-                const filesToDelete = mediaUrlsToDelete.map(url => {
-                    const parts = url.split('/thread-media/');
-                    return parts[1]; // Get path after bucket name
-                }).filter(Boolean); // Filter out any nulls
 
-                if (filesToDelete.length > 0) {
-                    const { error: storageError } = await supabase.storage
-                        .from('thread-media')
-                        .remove(filesToDelete);
+                const API_URL = import.meta.env.PROD ? '/api' : (import.meta.env.VITE_API_URL || 'http://localhost:3000');
 
-                    if (storageError) {
-                        console.error('Failed to cleanup storage:', storageError);
-                        // We don't block publishing on this, just log it
-                    } else {
-                        console.log('Storage cleanup successful');
+                // Delete files via backend R2
+                await Promise.all(mediaUrlsToDelete.map(async (url) => {
+                    try {
+                        await fetch(`${API_URL}/delete-file`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ url })
+                        });
+                    } catch (err) {
+                        console.error('Failed to delete file:', url, err);
                     }
-                }
+                }));
+                console.log('Storage cleanup initiated');
             }
 
             // 3. Update status in Supabase

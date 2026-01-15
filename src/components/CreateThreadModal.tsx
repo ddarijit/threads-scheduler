@@ -135,18 +135,39 @@ export const CreateThreadModal = ({ isOpen, onClose, onSuccess, threadToEdit }: 
     };
 
     const uploadMedia = async (file: File) => {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random()}.${fileExt}`;
-        const filePath = `${user?.id}/${fileName}`;
+        // 1. Get Presigned URL
+        const API_URL = import.meta.env.PROD ? '/api' : (import.meta.env.VITE_API_URL || 'http://localhost:3000');
 
-        const { error: uploadError } = await supabase.storage
-            .from('thread-media')
-            .upload(filePath, file);
+        const response = await fetch(`${API_URL}/generate-upload-url`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                fileName: file.name,
+                fileType: file.type,
+                userId: user?.id
+            })
+        });
 
-        if (uploadError) throw uploadError;
+        if (!response.ok) {
+            throw new Error('Failed to get upload URL');
+        }
 
-        const { data } = supabase.storage.from('thread-media').getPublicUrl(filePath);
-        return data.publicUrl;
+        const { uploadUrl, publicUrl } = await response.json();
+
+        // 2. Upload to R2
+        const uploadResponse = await fetch(uploadUrl, {
+            method: 'PUT',
+            body: file,
+            headers: {
+                'Content-Type': file.type
+            }
+        });
+
+        if (!uploadResponse.ok) {
+            throw new Error('Failed to upload file to storage');
+        }
+
+        return publicUrl;
     };
 
     const handleSubmit = async (e: React.FormEvent) => {

@@ -5,6 +5,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 import { createClient } from '@supabase/supabase-js';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // Load env vars
 const __filename = fileURLToPath(import.meta.url);
@@ -18,15 +20,27 @@ app.use(express.json());
 const PORT = 3000;
 
 // Initialize Supabase Admin Client (Service Role)
-// Need this to read user tokens and update threads without RLS blocking
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // You need to add this to .env!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseServiceKey) {
     console.warn('WARNING: SUPABASE_SERVICE_ROLE_KEY is missing. Backend scheduler will not work.');
 }
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey || 'placeholder');
+
+// Initialize S3 Client (Cloudflare R2)
+const r2 = new S3Client({
+    region: 'auto',
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
+});
+
+const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
+const R2_PUBLIC_DOMAIN = process.env.R2_PUBLIC_DOMAIN;
 
 // --- CRON SCHEDULER ---
 // Runs every 10 seconds
@@ -265,25 +279,21 @@ cron.schedule('*/10 * * * * *', async () => {
                 // --- 6. Cleanup Media (Save Storage) ---
                 if (mediaUrls.length > 0) {
                     try {
-                        const pathsToDelete = mediaUrls.map(url => {
-                            try {
-                                // Extract path after 'thread-media/'
-                                const parts = url.split('/thread-media/');
-                                return parts.length > 1 ? parts[1] : null;
-                            } catch { return null; }
-                        }).filter(Boolean);
-
-                        if (pathsToDelete.length > 0) {
-                            console.log(`[Cron] Cleaning up ${pathsToDelete.length} media files...`);
-                            const { error: removeError } = await supabase.storage
-                                .from('thread-media')
-                                .remove(pathsToDelete);
-
-                            if (removeError) {
-                                console.error('[Cron] Failed to delete media:', removeError);
-                            } else {
-                                console.log('[Cron] Media cleanup successful.');
+                        console.log(`[Cron] Cleaning up ${mediaUrls.length} media files from R2...`);
+                        for (const url of mediaUrls) {
+                            if (!url.includes(process.env.R2_PUBLIC_DOMAIN)) {
+                                console.log(`[Cron] Skipping non-R2 url: ${url}`);
+                                continue;
                             }
+                            // Extract key from URL
+                            // URL: https://pub-xxxx/KEY
+                            const key = url.replace(`${process.env.R2_PUBLIC_DOMAIN}/`, '');
+
+                            await r2.send(new DeleteObjectCommand({
+                                Bucket: process.env.R2_BUCKET_NAME,
+                                Key: key
+                            }));
+                            console.log(`[Cron] Deleted R2 object: ${key}`);
                         }
                     } catch (cleanupErr) {
                         console.error('[Cron] Error during media cleanup:', cleanupErr);
@@ -300,16 +310,14 @@ cron.schedule('*/10 * * * * *', async () => {
                 const failedMediaUrls = thread.media_urls || [];
                 if (failedMediaUrls.length > 0) {
                     try {
-                        const pathsToDelete = failedMediaUrls.map(url => {
-                            try {
-                                const parts = url.split('/thread-media/');
-                                return parts.length > 1 ? parts[1] : null;
-                            } catch { return null; }
-                        }).filter(Boolean);
-
-                        if (pathsToDelete.length > 0) {
-                            console.log(`[Cron-Fail] Cleaning up ${pathsToDelete.length} media files...`);
-                            await supabase.storage.from('thread-media').remove(pathsToDelete);
+                        console.log(`[Cron-Fail] Cleaning up ${failedMediaUrls.length} media files from R2...`);
+                        for (const url of failedMediaUrls) {
+                            if (!url.includes(process.env.R2_PUBLIC_DOMAIN)) continue;
+                            const key = url.replace(`${process.env.R2_PUBLIC_DOMAIN}/`, '');
+                            await r2.send(new DeleteObjectCommand({
+                                Bucket: process.env.R2_BUCKET_NAME,
+                                Key: key
+                            }));
                         }
                     } catch (cleanupErr) {
                         console.error('[Cron-Fail] Error during media cleanup:', cleanupErr);
@@ -332,6 +340,71 @@ cron.schedule('*/10 * * * * *', async () => {
 
 
 // --- APP ROUTES ---
+
+// 1. Generate Presigned URL for Upload
+app.post('/generate-upload-url', async (req, res) => {
+    try {
+        const { fileName, fileType, userId } = req.body;
+
+        if (!fileName || !fileType || !userId) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        // Clean filename and create unique path
+        // Path: user_id/timestamp-filename
+        const cleanFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '');
+        const key = `${userId}/${Date.now()}-${cleanFileName}`;
+
+        const command = new PutObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: key,
+            ContentType: fileType,
+            // ACL: 'public-read', // Not strictly needed if public access is enabled on bucket
+        });
+
+        // Generate Presigned URL (valid for 5 mins)
+        const uploadUrl = await getSignedUrl(r2, command, { expiresIn: 300 });
+        const publicUrl = `${R2_PUBLIC_DOMAIN}/${key}`;
+
+        res.json({ uploadUrl, publicUrl, key });
+    } catch (error) {
+        console.error('Error generating upload URL:', error);
+        res.status(500).json({ error: 'Failed to generate upload URL' });
+    }
+});
+
+// 2. Delete File from R2
+app.post('/delete-file', async (req, res) => {
+    try {
+        let { key, url } = req.body;
+
+        if (!key && !url) {
+            return res.status(400).json({ error: 'Missing file key or url' });
+        }
+
+        // If URL provided, extract key
+        if (url && !key) {
+            // URL: https://pub-xxxx/KEY
+            if (url.includes(R2_PUBLIC_DOMAIN)) {
+                key = url.replace(`${R2_PUBLIC_DOMAIN}/`, '');
+            } else {
+                return res.json({ success: true, message: 'Skipped non-R2 url' });
+            }
+        }
+
+        console.log(`[R2] Deleting file: ${key}`);
+        const command = new DeleteObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: key,
+        });
+
+        await r2.send(command);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting file:', error);
+        res.status(500).json({ error: 'Failed to delete file' });
+    }
+});
 
 app.post('/exchange-token', async (req, res) => {
     try {
