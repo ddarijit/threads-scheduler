@@ -240,28 +240,40 @@ export default async function handler(req, res) {
                 // --- C. Post First Comment ---
                 let warningMessage = null;
                 if (thread.first_comment && publishedId) {
-                    try {
-                        console.log('[Cron] Waiting 2s before posting comment...');
-                        await new Promise(r => setTimeout(r, 2000));
+                    const postComment = async (attempt = 1) => {
+                        try {
+                            // Wait 15s for first attempt, 5s for retry
+                            const delay = attempt === 1 ? 15000 : 5000;
+                            console.log(`[Cron] Waiting ${delay}ms before posting comment (Attempt ${attempt})...`);
+                            await new Promise(r => setTimeout(r, delay));
 
-                        const commentParams = new URLSearchParams();
-                        commentParams.append('media_type', 'TEXT');
-                        commentParams.append('text', thread.first_comment);
-                        commentParams.append('reply_to_id', publishedId);
-                        commentParams.append('access_token', accessToken);
+                            const commentParams = new URLSearchParams();
+                            commentParams.append('media_type', 'TEXT');
+                            commentParams.append('text', thread.first_comment);
+                            commentParams.append('reply_to_id', publishedId);
+                            commentParams.append('access_token', accessToken);
 
-                        const commentResult = await postToThreads('threads', commentParams);
-                        const commentCreationId = commentResult.id;
+                            const commentResult = await postToThreads('threads', commentParams);
+                            const commentCreationId = commentResult.id;
 
-                        const commentPublishParams = new URLSearchParams();
-                        commentPublishParams.append('creation_id', commentCreationId);
-                        commentPublishParams.append('access_token', accessToken);
+                            const commentPublishParams = new URLSearchParams();
+                            commentPublishParams.append('creation_id', commentCreationId);
+                            commentPublishParams.append('access_token', accessToken);
 
-                        await postToThreads('threads_publish', commentPublishParams);
-                    } catch (commentErr) {
-                        console.error('[Cron] Failed to publish first comment (non-fatal):', commentErr.message);
-                        warningMessage = `Published, but comment failed: ${commentErr.message}`;
-                    }
+                            await postToThreads('threads_publish', commentPublishParams);
+                            console.log('[Cron] First comment published successfully.');
+                        } catch (commentErr) {
+                            console.error(`[Cron] Failed to publish first comment (Attempt ${attempt}):`, commentErr.message);
+                            if (attempt === 1) {
+                                console.log('[Cron] Retrying comment post...');
+                                await postComment(2);
+                            } else {
+                                warningMessage = `Published, but comment failed: ${commentErr.message}`;
+                            }
+                        }
+                    };
+
+                    await postComment(1);
                 }
 
                 // 5. Mark as Published
