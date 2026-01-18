@@ -250,10 +250,30 @@ cron.schedule('*/10 * * * * *', async () => {
 
                 // --- C. Post First Comment (if exists) ---
                 if (thread.first_comment && publishedId) {
-                    console.log(`[Cron] Posting first comment for thread ${thread.id}...`);
-                    await new Promise(r => setTimeout(r, 5000)); // Wait 5s for propagation
+                    console.log(`[Cron] Preparing to post first comment for thread ${thread.id}...`);
+
+                    // Helper: Wait for published post to propagate
+                    const waitForPublishedPost = async (id) => {
+                        let attempts = 0;
+                        while (attempts < 15) {
+                            try {
+                                const url = `https://graph.threads.net/v1.0/${id}?fields=id&access_token=${accessToken}`;
+                                const res = await fetch(url);
+                                const data = await res.json();
+                                if (data.id) return true;
+                            } catch (e) {
+                                // ignore
+                            }
+                            console.log(`[Cron] Post ${id} not ready yet. Waiting 3s...`);
+                            await new Promise(r => setTimeout(r, 3000));
+                            attempts++;
+                        }
+                        throw new Error('Timed out waiting for published post to appear');
+                    };
 
                     try {
+                        await waitForPublishedPost(publishedId);
+
                         const commentParams = new URLSearchParams();
                         commentParams.append('media_type', 'TEXT');
                         commentParams.append('text', thread.first_comment);
@@ -275,13 +295,18 @@ cron.schedule('*/10 * * * * *', async () => {
                     }
                 }
 
-                // 5. Delete from Database (as requested by user)
+                // 5. Mark as Published (Update instead of Delete to keep stats)
+                // We clear media_urls to save space if needed, matching frontend behavior
                 await supabase
                     .from('threads')
-                    .delete()
+                    .update({
+                        status: 'published',
+                        scheduled_time: new Date().toISOString(),
+                        media_urls: [] // Clear media links as we delete files below
+                    })
                     .eq('id', thread.id);
 
-                console.log(`[Cron] Successfully published and deleted thread ${thread.id}`);
+                console.log(`[Cron] Successfully published thread ${thread.id}`);
 
 
 
