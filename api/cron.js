@@ -240,8 +240,8 @@ export default async function handler(req, res) {
                 // --- HELPER: Wait for Published Post (to reply) ---
                 const waitForPublishedPost = async (id) => {
                     let attempts = 0;
-                    // Poll for up to 45 seconds (15 attempts * 3s) to ensure propagation
-                    while (attempts < 15) {
+                    // Poll for up to 90 seconds (30 attempts * 3s) to ensure propagation
+                    while (attempts < 30) {
                         try {
                             const url = `https://graph.threads.net/v1.0/${id}?fields=id&access_token=${accessToken}`;
                             const res = await fetch(url);
@@ -260,29 +260,53 @@ export default async function handler(req, res) {
                 // --- C. Post First Comment ---
                 let warningMessage = null;
                 if (thread.first_comment && publishedId) {
+                    let commentSuccess = false;
+                    let commentRetryCount = 0;
+                    const maxCommentRetries = 3;
+
+                    // 1. Wait for parent post
                     try {
                         console.log(`[Cron] Verifying post ${publishedId} is ready for comment...`);
                         await waitForPublishedPost(publishedId);
+                    } catch (waitErr) {
+                        console.error(`[Cron] Failed waiting for parent post:`, waitErr.message);
+                        warningMessage = `Comment failed: Parent post not ready (${waitErr.message})`;
+                    }
 
-                        const commentParams = new URLSearchParams();
-                        commentParams.append('media_type', 'TEXT');
-                        commentParams.append('text', thread.first_comment);
-                        commentParams.append('reply_to_id', publishedId);
-                        commentParams.append('access_token', accessToken);
+                    // 2. Retry Loop for Comment
+                    if (!warningMessage) {
+                        while (!commentSuccess && commentRetryCount < maxCommentRetries) {
+                            try {
+                                if (commentRetryCount > 0) {
+                                    console.log(`[Cron] Retrying comment (attempt ${commentRetryCount + 1})...`);
+                                    await new Promise(r => setTimeout(r, 2000 * commentRetryCount)); // backoff
+                                }
 
-                        const commentResult = await postToThreads('threads', commentParams);
-                        const commentCreationId = commentResult.id;
+                                const commentParams = new URLSearchParams();
+                                commentParams.append('media_type', 'TEXT');
+                                commentParams.append('text', thread.first_comment);
+                                commentParams.append('reply_to_id', publishedId);
+                                commentParams.append('access_token', accessToken);
 
-                        const commentPublishParams = new URLSearchParams();
-                        commentPublishParams.append('creation_id', commentCreationId);
-                        commentPublishParams.append('access_token', accessToken);
+                                const commentResult = await postToThreads('threads', commentParams);
+                                const commentCreationId = commentResult.id;
 
-                        await postToThreads('threads_publish', commentPublishParams);
-                        console.log('[Cron] First comment published successfully.');
+                                const commentPublishParams = new URLSearchParams();
+                                commentPublishParams.append('creation_id', commentCreationId);
+                                commentPublishParams.append('access_token', accessToken);
 
-                    } catch (commentErr) {
-                        console.error(`[Cron] Failed to publish first comment:`, commentErr.message);
-                        warningMessage = `Published, but comment failed: ${commentErr.message}`;
+                                await postToThreads('threads_publish', commentPublishParams);
+                                console.log('[Cron] First comment published successfully.');
+                                commentSuccess = true;
+
+                            } catch (commentErr) {
+                                console.error(`[Cron] Comment attempt ${commentRetryCount + 1} failed:`, commentErr.message);
+                                commentRetryCount++;
+                                if (commentRetryCount >= maxCommentRetries) {
+                                    warningMessage = `Published, but comment failed after ${maxCommentRetries} attempts: ${commentErr.message}`;
+                                }
+                            }
+                        }
                     }
                 }
 
